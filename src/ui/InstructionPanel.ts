@@ -54,8 +54,9 @@ export class InstructionPanel {
     // Shadow
     add(this.scene.add.rectangle(px + 6, py + 6, PW, PH, 0x000000, 0.45));
 
-    // Background
-    add(this.scene.add.rectangle(px, py, PW, PH, BG.PANEL, 0.93).setOrigin(0));
+    // Background (tappable to close)
+    const panelBg = add(this.scene.add.rectangle(px, py, PW, PH, BG.PANEL, 0.93).setOrigin(0).setInteractive());
+    panelBg.on('pointerdown', () => this.setVisible(false));
 
     // Border
     const border = this.scene.add.graphics().setScrollFactor(0).setDepth(DEPTH);
@@ -111,17 +112,18 @@ export class InstructionPanel {
     }
 
     // Footer hint
-    add(this.scene.add.text(px + PW / 2, py + PH - PAD - 4, 'Press H to hide', {
+    add(this.scene.add.text(px + PW / 2, py + PH - PAD - 4, 'Press H or tap to close', {
       fontFamily: 'monospace', fontSize: '11px', color: TEXT.DISABLED,
     }).setOrigin(0.5, 1));
 
     this.setVisible(false);
 
-    // Persistent corner hint — always visible, never toggled
+    // Persistent corner hint — tappable to toggle the panel
     const hint = this.scene.add.text(8, 8, '[H] Help', {
       fontFamily: 'monospace', fontSize: '11px', color: TEXT.HINT,
       stroke: '#000000', strokeThickness: 2,
-    }).setScrollFactor(0).setDepth(DEPTH);
+    }).setScrollFactor(0).setDepth(DEPTH).setInteractive({ useHandCursor: true });
+    hint.on('pointerdown', () => this.toggle());
     this.persistentObjects.push(hint);
   }
 

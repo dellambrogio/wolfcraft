@@ -43,43 +43,41 @@ export class MobileControls {
   }
 
   private build(): void {
-    const PAD  = 16;
-    const BTN  = 56;   // D-pad button size
-    const ABTN = 52;   // action button size
-    const STEP = 60;   // action button stride (ABTN + gap)
+    const PAD       = 16;
+    const BTN       = 56;   // D-pad button size
+    const ABTN      = 52;   // action button size
+    const STEP      = 60;   // action button stride (ABTN + gap)
+    const TOOLBELT  = 86;   // toolbelt bar height — shift controls above it
 
     // ── D-pad ──────────────────────────────────────────────────────────────
-    // Centre of the cross: PAD + 1.5 × BTN from bottom-left
-    const dpCx = (W: number) => W * 0;  // unused, anchored left
-    const dpLeft = PAD + BTN * 1.5;
-    const dpRight = PAD + BTN * 2.5;
-    const dpCenterX = PAD + BTN * 1.5;
+    // Centre of the cross lifted above the toolbelt
+    const dpCX = PAD + BTN * 1.5;
 
     this.makeDirBtn(
-      () => dpCenterX,
-      (H) => H - PAD - BTN * 2.5,
+      () => dpCX,
+      (H) => H - PAD - TOOLBELT - BTN * 2.5,
       '▲', 0, -1,
     );
     this.makeDirBtn(
-      () => dpCenterX,
-      (H) => H - PAD - BTN * 0.5,
+      () => dpCX,
+      (H) => H - PAD - TOOLBELT - BTN * 0.5,
       '▼', 0, 1,
     );
     this.makeDirBtn(
       () => PAD + BTN * 0.5,
-      (H) => H - PAD - BTN * 1.5,
+      (H) => H - PAD - TOOLBELT - BTN * 1.5,
       '◀', -1, 0,
     );
     this.makeDirBtn(
       () => PAD + BTN * 2.5,
-      (H) => H - PAD - BTN * 1.5,
+      (H) => H - PAD - TOOLBELT - BTN * 1.5,
       '▶', 1, 0,
     );
 
-    // ── Action buttons (bottom-right) ──────────────────────────────────────
+    // ── Action buttons (bottom-right, above toolbelt) ───────────────────────
     // 2 columns (col 0 = far right), 3 rows (row 0 = bottom)
     const ax = (col: number) => (W: number) => W - PAD - ABTN / 2 - col * STEP;
-    const ay = (row: number) => (H: number) => H - PAD - ABTN / 2 - row * STEP;
+    const ay = (row: number) => (H: number) => H - PAD - TOOLBELT - ABTN / 2 - row * STEP;
 
     const actions: { label: string; col: number; row: number; fn: () => void; color?: number }[] = [
       { label: 'Gather', col: 0, row: 0, fn: () => { this._justGather = true; } },
@@ -97,7 +95,7 @@ export class MobileControls {
     // Sneak: wide button spanning both columns, one row above actions
     this.makeSneakBtn(
       (W) => W - PAD - (2 * ABTN + 8) / 2,
-      (H) => H - PAD - ABTN / 2 - 3 * STEP,
+      (H) => H - PAD - TOOLBELT - ABTN / 2 - 3 * STEP,
       2 * ABTN + 8,
       ABTN,
     );

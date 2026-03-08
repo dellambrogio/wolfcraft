@@ -56,6 +56,7 @@ export class GameScene extends Phaser.Scene {
   private worldSeed = NOISE_SEED;
   private soundSystem!: SoundSystem;
   private mobileControls!: MobileControls;
+  private uiCam!: Phaser.Cameras.Scene2D.Camera;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -130,11 +131,16 @@ export class GameScene extends Phaser.Scene {
       ...this.instructions.getGameObjects(),
       ...this.mobileControls.getGameObjects(),
     ];
-    const uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height);
-    uiCam.ignore(
+    this.uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height);
+    this.uiCam.ignore(
       this.children.list.filter(o => !uiObjects.includes(o))
     );
     this.cameras.main.ignore(uiObjects);
+
+    // Keep UI camera sized to the window on device rotation
+    this.scale.on('resize', (size: Phaser.Structs.Size) => {
+      this.uiCam.setSize(size.width, size.height);
+    }, this);
 
     // Fade in
     this.cameras.main.fadeIn(500, 0, 0, 0);

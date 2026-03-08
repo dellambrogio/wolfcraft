@@ -41,7 +41,7 @@ export class CraftingMenu {
   private craftBtnLbl!: Phaser.GameObjects.Text;
   private statusText!:  Phaser.GameObjects.Text;
 
-  // Cached layout coords (computed in build, reused in selectRecipe)
+  // Cached layout coords (container-relative, computed in build)
   private gridX = 0;
   private gridY = 0;
   private readonly CELL = 52;
@@ -70,6 +70,9 @@ export class CraftingMenu {
   private build(): void {
     const { width, height } = this.scene.scale;
 
+    // Scale so the panel fits on any screen (1× on desktop, smaller on mobile)
+    const s = Math.min(1, (width - 8) / 640, (height - 8) / 420);
+
     this.recipes = [
       { output: 'axe',      name: 'Axe',       cost: [{ key: 'wood', amount: 3 }, { key: 'stone', amount: 2 }] },
       { output: 'pickaxe',  name: 'Pickaxe',   cost: [{ key: 'wood', amount: 3 }, { key: 'stone', amount: 4 }] },
@@ -89,64 +92,87 @@ export class CraftingMenu {
       },
     ];
 
-    // ── Panel geometry ─────────────────────────────────────────────────────
+    // ── Full-screen backdrop (outside container — always fills screen) ─────
+    const backdrop = this.reg(
+      this.scene.add.rectangle(0, 0, width, height, 0x000000, 0.70)
+        .setOrigin(0).setScrollFactor(0).setDepth(DEPTH_CRAFT)
+        .setInteractive(),
+    ) as Phaser.GameObjects.Rectangle;
+    backdrop.on('pointerdown', () => this.close());
+
+    // ── Container (centred, scaled) ────────────────────────────────────────
+    const ct = this.reg(
+      this.scene.add.container(width / 2, height / 2)
+        .setScrollFactor(0).setDepth(DEPTH_CRAFT + 1),
+    ) as Phaser.GameObjects.Container;
+    ct.setScale(s);
+
+    const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => {
+      ct.add(o); return o;
+    };
+
+    // ── Panel geometry (in unscaled 640×420 space, centred at 0,0) ────────
     const PW = 640, PH = 420;
-    const PX = Math.floor((width  - PW) / 2);
-    const PY = Math.floor((height - PH) / 2);
+    const PX = -PW / 2;  // -320
+    const PY = -PH / 2;  // -210
 
     const LIST_W = 210;
-    const DIV_X  = PX + LIST_W;
+    const DIV_X  = PX + LIST_W;  // -110
 
     const CELL = this.CELL, GAP = this.GAP;
     const GRID_CONTENT_W = 3 * CELL + 2 * GAP; // 166
     const RIGHT_W        = PW - LIST_W;          // 430
-    // Total width used: grid(166) + gap(20) + arrow(22) + gap(10) + output(60) = 278
-    const USED_W = GRID_CONTENT_W + 20 + 22 + 10 + 60;
-    const LAYOUT_OFFSET = Math.floor((RIGHT_W - USED_W) / 2);
+    const USED_W         = GRID_CONTENT_W + 20 + 22 + 10 + 60; // 278
+    const LAYOUT_OFFSET  = Math.floor((RIGHT_W - USED_W) / 2);
 
     this.gridX = DIV_X + LAYOUT_OFFSET;
     this.gridY = PY + 90;
 
-    const arrowX = this.gridX + GRID_CONTENT_W + 20;
+    const arrowX    = this.gridX + GRID_CONTENT_W + 20;
     const arrowMidY = this.gridY + (3 * CELL + 2 * GAP) / 2;
-    const outX = arrowX + 22 + 10;
-    const outSize = 60;
+    const outX      = arrowX + 22 + 10;
+    const outSize   = 60;
     this.outCX = outX + outSize / 2;
     this.outCY = arrowMidY;
 
-    // ── Backdrop ───────────────────────────────────────────────────────────
-    this.reg(this.scene.add.rectangle(0, 0, width, height, 0x000000, 0.70)
-      .setOrigin(0).setScrollFactor(0).setDepth(DEPTH_CRAFT));
+    // Transparent blocker — absorbs clicks on the panel so they don't reach the backdrop
+    add(this.scene.add.rectangle(0, 0, PW, PH, 0x000000, 0).setInteractive());
 
     // ── Panel background ───────────────────────────────────────────────────
-    this.reg(this.scene.add.rectangle(PX, PY, PW, PH, BG.FULL_PANEL, 1)
-      .setOrigin(0).setScrollFactor(0).setDepth(DEPTH_CRAFT + 1));
+    add(this.scene.add.rectangle(PX, PY, PW, PH, BG.FULL_PANEL, 1).setOrigin(0));
 
     // Panel border
-    const border = this.reg(this.scene.add.graphics().setScrollFactor(0).setDepth(DEPTH_CRAFT + 1)) as Phaser.GameObjects.Graphics;
+    const border = add(this.scene.add.graphics()) as Phaser.GameObjects.Graphics;
     border.lineStyle(2, BORDER.STD, 1);
     border.strokeRect(PX, PY, PW, PH);
 
     // Title bar
-    this.reg(this.scene.add.rectangle(PX, PY, PW, 38, BG.TITLEBAR, 1)
-      .setOrigin(0).setScrollFactor(0).setDepth(DEPTH_CRAFT + 1));
-    this.reg(this.scene.add.text(PX + PW / 2, PY + 19, 'CRAFTING TABLE', {
+    add(this.scene.add.rectangle(PX, PY, PW, 38, BG.TITLEBAR, 1).setOrigin(0));
+    add(this.scene.add.text(0, PY + 19, 'CRAFTING TABLE', {
       fontFamily: 'monospace', fontSize: '15px', color: TEXT.LIGHT,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_CRAFT + 2));
+    }).setOrigin(0.5));
+
+    // Close button (top-right)
+    const closeBtn = add(this.scene.add.text(PX + PW - 6, PY + 6, '✕', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#888888',
+    }).setOrigin(1, 0).setInteractive({ useHandCursor: true })) as Phaser.GameObjects.Text;
+    closeBtn.on('pointerover',  () => closeBtn.setColor('#ffffff'));
+    closeBtn.on('pointerout',   () => closeBtn.setColor('#888888'));
+    closeBtn.on('pointerdown',  () => this.close());
 
     // Dividers
-    const divG = this.reg(this.scene.add.graphics().setScrollFactor(0).setDepth(DEPTH_CRAFT + 2)) as Phaser.GameObjects.Graphics;
+    const divG = add(this.scene.add.graphics()) as Phaser.GameObjects.Graphics;
     divG.lineStyle(1, BORDER.DIM, 1);
-    divG.lineBetween(PX,     PY + 64, PX + PW, PY + 64);
-    divG.lineBetween(DIV_X,  PY + 38, DIV_X,   PY + PH);
+    divG.lineBetween(PX,    PY + 64, PX + PW, PY + 64);
+    divG.lineBetween(DIV_X, PY + 38, DIV_X,   PY + PH);
 
     // Section headers
-    this.reg(this.scene.add.text(PX + LIST_W / 2, PY + 51, 'RECIPES', {
+    add(this.scene.add.text(PX + LIST_W / 2, PY + 51, 'RECIPES', {
       fontFamily: 'monospace', fontSize: '10px', color: TEXT.DIM,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_CRAFT + 2));
-    this.reg(this.scene.add.text(DIV_X + RIGHT_W / 2, PY + 51, 'CRAFTING GRID', {
+    }).setOrigin(0.5));
+    add(this.scene.add.text(DIV_X + RIGHT_W / 2, PY + 51, 'CRAFTING GRID', {
       fontFamily: 'monospace', fontSize: '10px', color: TEXT.DIM,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_CRAFT + 2));
+    }).setOrigin(0.5));
 
     // ── Recipe list (left) ─────────────────────────────────────────────────
     const ROW_H  = 50;
@@ -157,10 +183,9 @@ export class CraftingMenu {
       const rx  = PX + 4;
       const rowW = LIST_W - 8;
 
-      const rowBg = this.reg(
+      const rowBg = add(
         this.scene.add.rectangle(rx, ry, rowW, ROW_H - 4, BG.ROW, 1)
-          .setOrigin(0).setScrollFactor(0).setDepth(DEPTH_CRAFT + 2)
-          .setInteractive({ useHandCursor: true }),
+          .setOrigin(0).setInteractive({ useHandCursor: true }),
       ) as Phaser.GameObjects.Rectangle;
 
       rowBg.on('pointerover', () => {
@@ -172,26 +197,23 @@ export class CraftingMenu {
       rowBg.on('pointerdown', () => { this.selectRecipe(i); });
       this.listRowBgs.push(rowBg);
 
-      // Output icon (small, left of name)
-      const iconG = this.reg(this.scene.add.graphics().setScrollFactor(0).setDepth(DEPTH_CRAFT + 3)) as Phaser.GameObjects.Graphics;
+      const iconG = add(this.scene.add.graphics()) as Phaser.GameObjects.Graphics;
       drawIcon(iconG, rx + 22, ry + (ROW_H - 4) / 2, recipe.output, 0.42);
 
-      // Recipe name
-      const nameText = this.reg(this.scene.add.text(rx + 46, ry + 8, recipe.name, {
+      const nameText = add(this.scene.add.text(rx + 46, ry + 8, recipe.name, {
         fontFamily: 'monospace', fontSize: '12px', color: TEXT.LIGHT,
-      }).setScrollFactor(0).setDepth(DEPTH_CRAFT + 3)) as Phaser.GameObjects.Text;
+      })) as Phaser.GameObjects.Text;
 
-      // Cost summary line
-      const costStr = recipe.cost.map(c => `${c.amount}× ${c.key}`).join('  ');
-      const costText = this.reg(this.scene.add.text(rx + 46, ry + 24, costStr, {
+      const costStr  = recipe.cost.map(c => `${c.amount}× ${c.key}`).join('  ');
+      const costText = add(this.scene.add.text(rx + 46, ry + 24, costStr, {
         fontFamily: 'monospace', fontSize: '9px', color: TEXT.MID,
-      }).setScrollFactor(0).setDepth(DEPTH_CRAFT + 3)) as Phaser.GameObjects.Text;
+      })) as Phaser.GameObjects.Text;
 
       this.listRows.push({ bg: rowBg, iconG, nameText, costText });
     });
 
     // ── 3×3 Crafting grid (right) ──────────────────────────────────────────
-    const cellBgG = this.reg(this.scene.add.graphics().setScrollFactor(0).setDepth(DEPTH_CRAFT + 2)) as Phaser.GameObjects.Graphics;
+    const cellBgG = add(this.scene.add.graphics()) as Phaser.GameObjects.Graphics;
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 3; col++) {
         const cx = this.gridX + col * (CELL + GAP);
@@ -203,60 +225,53 @@ export class CraftingMenu {
       }
     }
 
-    // 9 dynamic icon slots (one Graphics per cell)
     for (let c = 0; c < 9; c++) {
-      this.gridIconGs.push(
-        this.reg(this.scene.add.graphics().setScrollFactor(0).setDepth(DEPTH_CRAFT + 3)) as Phaser.GameObjects.Graphics,
-      );
+      this.gridIconGs.push(add(this.scene.add.graphics()) as Phaser.GameObjects.Graphics);
     }
 
     // Arrow
-    this.reg(this.scene.add.text(arrowX, arrowMidY, '→', {
+    add(this.scene.add.text(arrowX, arrowMidY, '→', {
       fontFamily: 'monospace', fontSize: '24px', color: TEXT.DIM,
-    }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(DEPTH_CRAFT + 2));
+    }).setOrigin(0, 0.5));
 
-    // Output slot background
-    const outBgG = this.reg(this.scene.add.graphics().setScrollFactor(0).setDepth(DEPTH_CRAFT + 2)) as Phaser.GameObjects.Graphics;
+    // Output slot
+    const outBgG = add(this.scene.add.graphics()) as Phaser.GameObjects.Graphics;
     outBgG.fillStyle(BG.PANEL, 1);
     outBgG.fillRect(outX, arrowMidY - outSize / 2, outSize, outSize);
     outBgG.lineStyle(2, BORDER.LIGHT, 1);
     outBgG.strokeRect(outX, arrowMidY - outSize / 2, outSize, outSize);
 
-    // Dynamic output icon
-    this.outputIconG = this.reg(
-      this.scene.add.graphics().setScrollFactor(0).setDepth(DEPTH_CRAFT + 3),
-    ) as Phaser.GameObjects.Graphics;
+    this.outputIconG = add(this.scene.add.graphics()) as Phaser.GameObjects.Graphics;
 
     // ── Craft button ───────────────────────────────────────────────────────
     const BTN_W = 130, BTN_H = 36;
     const contentCX = this.gridX + USED_W / 2;
-    const btnY = this.gridY + 3 * CELL + 2 * GAP + 22;
+    const btnY      = this.gridY + 3 * CELL + 2 * GAP + 22;
 
-    this.craftBtn = this.reg(
+    this.craftBtn = add(
       this.scene.add.rectangle(contentCX, btnY, BTN_W, BTN_H, BG.BTN, 1)
-        .setOrigin(0.5, 0).setScrollFactor(0).setDepth(DEPTH_CRAFT + 2)
-        .setInteractive({ useHandCursor: true }),
+        .setOrigin(0.5, 0).setInteractive({ useHandCursor: true }),
     ) as Phaser.GameObjects.Rectangle;
 
     this.craftBtn.on('pointerover', () => {
       if (this.canCraftSelected()) this.craftBtn.setFillStyle(BG.BTN_OVER, 1);
     });
-    this.craftBtn.on('pointerout', () => { this.refreshCraftBtn(); });
+    this.craftBtn.on('pointerout',  () => { this.refreshCraftBtn(); });
     this.craftBtn.on('pointerdown', () => { this.doCraft(); });
 
-    this.craftBtnLbl = this.reg(this.scene.add.text(contentCX, btnY + BTN_H / 2, 'CRAFT', {
+    this.craftBtnLbl = add(this.scene.add.text(contentCX, btnY + BTN_H / 2, 'CRAFT', {
       fontFamily: 'monospace', fontSize: '14px', color: TEXT.MID,
       stroke: '#000000', strokeThickness: 2,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_CRAFT + 3)) as Phaser.GameObjects.Text;
+    }).setOrigin(0.5)) as Phaser.GameObjects.Text;
 
-    this.statusText = this.reg(this.scene.add.text(contentCX, btnY + BTN_H + 8, '', {
+    this.statusText = add(this.scene.add.text(contentCX, btnY + BTN_H + 8, '', {
       fontFamily: 'monospace', fontSize: '10px', color: '#ff7744',
-    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(DEPTH_CRAFT + 3)) as Phaser.GameObjects.Text;
+    }).setOrigin(0.5, 0)) as Phaser.GameObjects.Text;
 
-    // ── ESC hint ───────────────────────────────────────────────────────────
-    this.reg(this.scene.add.text(PX + PW / 2, PY + PH - 10, '[ESC] close', {
+    // Close hint
+    add(this.scene.add.text(0, PY + PH - 10, '[ESC] / ✕ to close', {
       fontFamily: 'monospace', fontSize: '10px', color: TEXT.FAINT,
-    }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(DEPTH_CRAFT + 2));
+    }).setOrigin(0.5, 1));
 
     this.escKey = this.scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
   }
@@ -266,12 +281,10 @@ export class CraftingMenu {
   private selectRecipe(idx: number): void {
     this.selectedIdx = idx;
 
-    // Highlight selected row, reset others
     this.listRowBgs.forEach((bg, i) => {
       bg.setFillStyle(i === idx ? 0x1e3020 : BG.ROW, 1);
     });
 
-    // Expand recipe cost into 9 cell slots (left-to-right, top-to-bottom)
     const cells: Array<keyof Inventory | null> = Array(9).fill(null);
     let slot = 0;
     for (const { key, amount } of this.recipes[idx].cost) {
@@ -280,7 +293,6 @@ export class CraftingMenu {
       }
     }
 
-    // Redraw grid cell icons
     const CELL = this.CELL, GAP = this.GAP;
     for (let c = 0; c < 9; c++) {
       this.gridIconGs[c].clear();
@@ -292,7 +304,6 @@ export class CraftingMenu {
       }
     }
 
-    // Redraw output icon
     this.outputIconG.clear();
     drawIcon(this.outputIconG, this.outCX, this.outCY, this.recipes[idx].output, 0.65);
 

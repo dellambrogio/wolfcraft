@@ -11,6 +11,7 @@ const config: Phaser.Types.Core.GameConfig = {
   parent: document.body,
   pixelArt: true,
   antialias: false,
+  input: { activePointers: 4 },
   scene: [BootScene, MenuScene, GameScene],
   scale: {
     mode: Phaser.Scale.RESIZE,

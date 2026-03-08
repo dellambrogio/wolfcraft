@@ -89,7 +89,13 @@ export class HUD {
       fontFamily: 'monospace', fontSize: '11px', color: '#ffffff', stroke: '#000', strokeThickness: 2,
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(DEPTH_HUD + 2));
 
-    // --- Minimap (bottom-right corner) ---
+    // --- Minimap (bottom-right corner) — hidden on touch/mobile devices ---
+    const isMobile = this.scene.sys.game.device.input.touch;
+    if (isMobile) {
+      // On mobile the minimap overlaps with action buttons — skip it
+      this.minimap = { x: 0, y: 0, w: 0, h: 0 };
+      return;
+    }
     const MINI_W = 160;
     const MINI_H = 120;
     const MINI_PAD = 8;
@@ -173,6 +179,7 @@ export class HUD {
     this.healthText.setText(String(playerHealth));
 
     // Minimap fog reveal — erase fog RT when player enters a new tile
+    if (this.minimap.w === 0) return; // minimap disabled (mobile)
     const worldW = MAP_WIDTH * TILE_SIZE;
     const worldH = MAP_HEIGHT * TILE_SIZE;
     const { x: mx, y: my, w: mw, h: mh } = this.minimap;
