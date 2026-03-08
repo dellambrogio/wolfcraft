@@ -12,12 +12,14 @@ import { WorldGenerator } from '../world/WorldGenerator';
 import { TILE_META, TileType } from '../world/TileTypes';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { MapObjects } from '../world/MapObjects';
+import { MobileControls } from '../ui/MobileControls';
 
 export class Player {
   private scene: Phaser.Scene;
   private world: WorldGenerator;
   private resources: ResourceSystem;
   private mapObjects: MapObjects;
+  private mobile: MobileControls | null = null;
 
   readonly sprite: Phaser.GameObjects.Sprite;
 
@@ -102,11 +104,13 @@ export class Player {
     world: WorldGenerator,
     resources: ResourceSystem,
     mapObjects: MapObjects,
+    mobile: MobileControls | null = null,
   ) {
     this.scene = scene;
     this.world = world;
     this.resources = resources;
     this.mapObjects = mapObjects;
+    this.mobile = mobile;
 
     this._tx = startTx;
     this._ty = startTy;
@@ -194,7 +198,7 @@ export class Player {
 
   update(delta: number): void {
     // ── Sneak ─────────────────────────────────────────────────────────────
-    this._sneaking = this.shiftKey.isDown;
+    this._sneaking = this.shiftKey.isDown || (this.mobile?.sneakDown ?? false);
     this.sprite.setAlpha(this._sneaking ? 0.55 : 1.0);
 
     // ── Water state (from settled tile) ───────────────────────────────────
@@ -253,27 +257,27 @@ export class Player {
 
     // --- Gather ---
     this._nearGatherable = this.checkNearGatherable();
-    if (Phaser.Input.Keyboard.JustDown(this.gatherKey)) {
+    if (Phaser.Input.Keyboard.JustDown(this.gatherKey) || this.mobile?.justGather) {
       this.tryGather();
     }
 
     // --- Torch toggle ---
-    if (Phaser.Input.Keyboard.JustDown(this.torchKey)) {
+    if (Phaser.Input.Keyboard.JustDown(this.torchKey) || this.mobile?.justTorch) {
       this._torchOn = !this._torchOn;
     }
 
     // --- Hunt ---
-    if (Phaser.Input.Keyboard.JustDown(this.huntKey)) {
+    if (Phaser.Input.Keyboard.JustDown(this.huntKey) || this.mobile?.justHunt) {
       this._wantsToHunt = true;
     }
 
     // --- Place fire ---
-    if (Phaser.Input.Keyboard.JustDown(this.firePlaceKey)) {
+    if (Phaser.Input.Keyboard.JustDown(this.firePlaceKey) || this.mobile?.justFire) {
       this._wantsToPlaceFire = true;
     }
 
     // --- Eat ---
-    if (Phaser.Input.Keyboard.JustDown(this.eatKey)) {
+    if (Phaser.Input.Keyboard.JustDown(this.eatKey) || this.mobile?.justEat) {
       this.tryEat();
     }
   }
@@ -283,6 +287,9 @@ export class Player {
     if (this.cursors.right.isDown || this.wasd.right.isDown) return { dx:  1, dy:  0 };
     if (this.cursors.up.isDown    || this.wasd.up.isDown)    return { dx:  0, dy: -1 };
     if (this.cursors.down.isDown  || this.wasd.down.isDown)  return { dx:  0, dy:  1 };
+    if (this.mobile && (this.mobile.touchDx !== 0 || this.mobile.touchDy !== 0)) {
+      return { dx: this.mobile.touchDx, dy: this.mobile.touchDy };
+    }
     return { dx: 0, dy: 0 };
   }
 

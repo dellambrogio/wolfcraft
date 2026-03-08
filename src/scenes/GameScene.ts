@@ -15,6 +15,7 @@ import { NightPipeline } from '../pipelines/NightPipeline';
 import { Fire } from '../entities/Fire';
 import { drawIcon } from '../ui/drawIcon';
 import { Inventory } from '../systems/ResourceSystem';
+import { MobileControls } from '../ui/MobileControls';
 import {
   TILE_SIZE,
   MAP_WIDTH,
@@ -54,6 +55,7 @@ export class GameScene extends Phaser.Scene {
   private gameOver = false;
   private worldSeed = NOISE_SEED;
   private soundSystem!: SoundSystem;
+  private mobileControls!: MobileControls;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -87,9 +89,12 @@ export class GameScene extends Phaser.Scene {
     this.mapObjects = new MapObjects(this, this.world);
     this.spawnAnimals();
 
+    // Mobile controls (created before player so objects exist for camera setup)
+    this.mobileControls = new MobileControls(this);
+
     // Spawn player at a walkable tile near center
     const { tx, ty } = this.world.findSpawnTile();
-    this.player = new Player(this, tx, ty, this.world, this.resources, this.mapObjects);
+    this.player = new Player(this, tx, ty, this.world, this.resources, this.mapObjects, this.mobileControls);
 
     // World-space tool graphic (follows player, redrawn when tool changes)
     this.playerToolGraphic = this.add.graphics().setDepth(DEPTH_PLAYER + 0.5);
@@ -123,6 +128,7 @@ export class GameScene extends Phaser.Scene {
       ...this.hud.getGameObjects(),
       ...this.craftingMenu.getGameObjects(),
       ...this.instructions.getGameObjects(),
+      ...this.mobileControls.getGameObjects(),
     ];
     const uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height);
     uiCam.ignore(
@@ -420,7 +426,7 @@ export class GameScene extends Phaser.Scene {
     this.instructions.update();
 
     // Toggle crafting menu
-    if (Phaser.Input.Keyboard.JustDown(this.craftKey)) {
+    if (Phaser.Input.Keyboard.JustDown(this.craftKey) || this.mobileControls.justCraft) {
       this.craftingMenu.toggle();
     }
 
@@ -543,10 +549,15 @@ export class GameScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '52px', color: '#cc2222',
       stroke: '#000000', strokeThickness: 6,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
-    const sub = this.add.text(width / 2, height / 2 + 20, 'Press R to restart', {
+    const restartHint = this.mobileControls.active ? 'Tap to restart' : 'Press R to restart';
+    const sub = this.add.text(width / 2, height / 2 + 20, restartHint, {
       fontFamily: 'monospace', fontSize: '22px', color: '#ffffff',
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    if (this.mobileControls.active) {
+      overlay.setInteractive().on('pointerdown', () => this.scene.restart());
+    }
 
     // Only show on the UI camera (no night pipeline darkening)
     this.cameras.main.ignore([overlay, title, sub]);
