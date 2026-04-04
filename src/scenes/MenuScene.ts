@@ -1,9 +1,20 @@
 import Phaser from 'phaser';
 import { NOISE_SEED } from '../constants';
 import { BG, BORDER, TEXT } from '../ui/palette';
+import {
+  GameSettings,
+  DayNightRatio,
+  DaySpeed,
+  DEFAULT_SETTINGS,
+  DAY_SPEED_LABELS,
+} from '../GameSettings';
+
+const DAY_RATIOS:  DayNightRatio[] = ['3:1', '2:1', '1:1', '1:2', '1:3'];
+const DAY_SPEEDS:  DaySpeed[]      = ['fast', 'normal', 'slow', 'crawl'];
 
 export class MenuScene extends Phaser.Scene {
   private currentSeed = NOISE_SEED;
+  private settings: GameSettings = { ...DEFAULT_SETTINGS };
 
   constructor() {
     super({ key: 'MenuScene' });
@@ -17,29 +28,22 @@ export class MenuScene extends Phaser.Scene {
     this.drawAtmosphere(width, height);
 
     // ── Title ─────────────────────────────────────────────────────────────
-    // Shadow layer
-    this.add.text(cx + 3, cy - 178 + 3, 'WOLFCRAFT', {
+    this.add.text(cx + 3, cy - 200 + 3, 'WOLFCRAFT', {
       fontFamily: 'serif', fontSize: '64px', color: '#000000',
     }).setOrigin(0.5).setAlpha(0.6);
 
-    this.add.text(cx, cy - 178, 'WOLFCRAFT', {
-      fontFamily: 'serif',
-      fontSize: '64px',
-      color: TEXT.WHITE,
-      stroke: '#000000',
-      strokeThickness: 8,
+    this.add.text(cx, cy - 200, 'WOLFCRAFT', {
+      fontFamily: 'serif', fontSize: '64px',
+      color: TEXT.WHITE, stroke: '#000000', strokeThickness: 8,
     }).setOrigin(0.5);
 
-    this.add.text(cx, cy - 108, 'Survive the Night', {
-      fontFamily: 'monospace',
-      fontSize: '16px',
-      color: TEXT.MID,
-      stroke: '#000000',
-      strokeThickness: 3,
+    this.add.text(cx, cy - 132, 'Survive the Night', {
+      fontFamily: 'monospace', fontSize: '16px',
+      color: TEXT.MID, stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5);
 
     // ── Seed row ──────────────────────────────────────────────────────────
-    const seedY = cy - 30;
+    const seedY = cy - 78;
 
     this.add.text(cx - 110, seedY, 'SEED', {
       fontFamily: 'monospace', fontSize: '12px', color: TEXT.DIM,
@@ -62,10 +66,51 @@ export class MenuScene extends Phaser.Scene {
       seedText.setText(this.formatSeed(this.currentSeed));
     });
 
+    // ── Settings divider ──────────────────────────────────────────────────
+    const divY = cy - 48;
+    const g = this.add.graphics();
+    g.lineStyle(1, BORDER.DIM, 0.8);
+    g.lineBetween(cx - 120, divY, cx + 120, divY);
+    this.add.text(cx, divY, ' SETTINGS ', {
+      fontFamily: 'monospace', fontSize: '10px', color: TEXT.DIM,
+      backgroundColor: '#000000',
+    }).setOrigin(0.5);
+
+    // ── Settings rows ─────────────────────────────────────────────────────
+    this.addCycleRow(
+      cy - 22,
+      'DAY / NIGHT',
+      DAY_RATIOS,
+      DAY_RATIOS.indexOf(this.settings.dayNightRatio),
+      (i) => { this.settings.dayNightRatio = DAY_RATIOS[i]; },
+    );
+
+    this.addCycleRow(
+      cy + 10,
+      'SPEED (real/hr)',
+      DAY_SPEEDS.map(s => DAY_SPEED_LABELS[s]),
+      DAY_SPEEDS.indexOf(this.settings.daySpeed),
+      (i) => { this.settings.daySpeed = DAY_SPEEDS[i]; },
+    );
+
+    this.addToggleRow(
+      cy + 42,
+      'WOLVES',
+      this.settings.wolvesEnabled,
+      (v) => { this.settings.wolvesEnabled = v; },
+    );
+
+    this.addToggleRow(
+      cy + 74,
+      'STARTER KIT',
+      this.settings.starterKit,
+      (v) => { this.settings.starterKit = v; },
+    );
+
     // ── Start button ──────────────────────────────────────────────────────
-    const btn = this.add.rectangle(cx, cy + 50, 220, 52, BG.BTN)
+    const btn = this.add.rectangle(cx, cy + 140, 220, 52, BG.BTN)
       .setInteractive({ useHandCursor: true });
-    this.add.text(cx, cy + 50, 'ENTER THE WILD', {
+    this.add.text(cx, cy + 140, 'ENTER THE WILD', {
       fontFamily: 'monospace', fontSize: '20px',
       color: TEXT.WHITE, stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5);
@@ -75,10 +120,79 @@ export class MenuScene extends Phaser.Scene {
     btn.on('pointerdown',  () => {
       this.cameras.main.fadeOut(600, 0, 0, 0);
       this.cameras.main.once('camerafadeoutcomplete', () => {
-        this.scene.start('GameScene', { seed: this.currentSeed });
+        this.scene.start('GameScene', { seed: this.currentSeed, settings: this.settings });
       });
     });
+  }
 
+  /**
+   * Setting row that cycles through a list of string options on click.
+   * `values` are display strings; index maps back to the caller's option array.
+   */
+  private addCycleRow(
+    y: number,
+    label: string,
+    values: string[],
+    initialIndex: number,
+    onChange: (index: number) => void,
+  ): void {
+    const cx = this.scale.width / 2;
+    let idx = initialIndex;
+
+    this.add.text(cx - 110, y, label, {
+      fontFamily: 'monospace', fontSize: '11px', color: TEXT.DIM,
+    }).setOrigin(0, 0.5);
+
+    const btn = this.add.rectangle(cx + 72, y, 110, 24, BG.BTN)
+      .setInteractive({ useHandCursor: true });
+    const val = this.add.text(cx + 72, y, values[idx], {
+      fontFamily: 'monospace', fontSize: '11px', color: TEXT.LABEL,
+    }).setOrigin(0.5);
+
+    btn.on('pointerover',  () => btn.setFillStyle(BG.BTN_OVER));
+    btn.on('pointerout',   () => btn.setFillStyle(BG.BTN));
+    btn.on('pointerdown',  () => {
+      idx = (idx + 1) % values.length;
+      val.setText(values[idx]);
+      onChange(idx);
+    });
+  }
+
+  /**
+   * Setting row that toggles between ON and OFF on click.
+   */
+  private addToggleRow(
+    y: number,
+    label: string,
+    initial: boolean,
+    onChange: (value: boolean) => void,
+  ): void {
+    const cx = this.scale.width / 2;
+    let current = initial;
+
+    this.add.text(cx - 110, y, label, {
+      fontFamily: 'monospace', fontSize: '11px', color: TEXT.DIM,
+    }).setOrigin(0, 0.5);
+
+    const btn = this.add.rectangle(cx + 72, y, 110, 24, BG.BTN)
+      .setInteractive({ useHandCursor: true });
+    const val = this.add.text(cx + 72, y, current ? 'ON' : 'OFF', {
+      fontFamily: 'monospace', fontSize: '11px',
+      color: current ? '#88ff88' : TEXT.DIM,
+    }).setOrigin(0.5);
+
+    const refresh = () => {
+      val.setText(current ? 'ON' : 'OFF');
+      val.setColor(current ? '#88ff88' : TEXT.DIM);
+    };
+
+    btn.on('pointerover',  () => btn.setFillStyle(BG.BTN_OVER));
+    btn.on('pointerout',   () => btn.setFillStyle(BG.BTN));
+    btn.on('pointerdown',  () => {
+      current = !current;
+      refresh();
+      onChange(current);
+    });
   }
 
   /** Paint the atmospheric wolf scene onto a canvas texture. */
@@ -114,7 +228,6 @@ export class MenuScene extends Phaser.Scene {
     const moonY = height * 0.25;
     const moonR = 72;
 
-    // Outer glow
     const outerGlow = ctx.createRadialGradient(moonX, moonY, moonR * 0.6, moonX, moonY, moonR * 2.8);
     outerGlow.addColorStop(0,   'rgba(180, 0, 0, 0.22)');
     outerGlow.addColorStop(0.4, 'rgba(120, 0, 0, 0.10)');
@@ -124,7 +237,6 @@ export class MenuScene extends Phaser.Scene {
     ctx.arc(moonX, moonY, moonR * 2.8, 0, Math.PI * 2);
     ctx.fill();
 
-    // Moon disc
     const moonDisc = ctx.createRadialGradient(moonX - moonR * 0.2, moonY - moonR * 0.2, 0, moonX, moonY, moonR);
     moonDisc.addColorStop(0,   '#ff6644');
     moonDisc.addColorStop(0.4, '#cc2200');
@@ -135,7 +247,6 @@ export class MenuScene extends Phaser.Scene {
     ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
     ctx.fill();
 
-    // Moon craters (subtle)
     ctx.fillStyle = 'rgba(0,0,0,0.12)';
     for (const [ox, oy, or_] of [[-22, 10, 10], [18, -20, 7], [30, 18, 5], [-8, -28, 6]] as [number,number,number][]) {
       ctx.beginPath();
@@ -148,7 +259,6 @@ export class MenuScene extends Phaser.Scene {
     const wY = height * 0.56;
     const wS = 105;
 
-    // Glow behind head
     const wolfGlow = ctx.createRadialGradient(wX, wY, 0, wX, wY, wS * 1.6);
     wolfGlow.addColorStop(0,   'rgba(120, 0, 0, 0.18)');
     wolfGlow.addColorStop(1,   'rgba(0,   0, 0, 0)');
@@ -159,7 +269,6 @@ export class MenuScene extends Phaser.Scene {
 
     ctx.fillStyle = '#060606';
 
-    // Left ear
     ctx.beginPath();
     ctx.moveTo(wX - wS * 0.30, wY - wS * 0.32);
     ctx.lineTo(wX - wS * 0.52, wY - wS * 0.90);
@@ -167,7 +276,6 @@ export class MenuScene extends Phaser.Scene {
     ctx.closePath();
     ctx.fill();
 
-    // Right ear
     ctx.beginPath();
     ctx.moveTo(wX + wS * 0.30, wY - wS * 0.32);
     ctx.lineTo(wX + wS * 0.52, wY - wS * 0.90);
@@ -175,12 +283,10 @@ export class MenuScene extends Phaser.Scene {
     ctx.closePath();
     ctx.fill();
 
-    // Head (slightly wide ellipse)
     ctx.beginPath();
     ctx.ellipse(wX, wY, wS * 0.52, wS * 0.46, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Neck / shoulders
     ctx.beginPath();
     ctx.moveTo(wX - wS * 0.60, wY + wS * 0.50);
     ctx.bezierCurveTo(wX - wS * 0.50, wY + wS * 0.08, wX - wS * 0.28, wY + wS * 0.04, wX - wS * 0.22, wY + wS * 0.38);
@@ -189,7 +295,6 @@ export class MenuScene extends Phaser.Scene {
     ctx.closePath();
     ctx.fill();
 
-    // Snout (lower muzzle protrusion)
     ctx.beginPath();
     ctx.moveTo(wX - wS * 0.24, wY + wS * 0.12);
     ctx.quadraticCurveTo(wX - wS * 0.28, wY + wS * 0.38, wX, wY + wS * 0.42);
@@ -197,7 +302,6 @@ export class MenuScene extends Phaser.Scene {
     ctx.closePath();
     ctx.fill();
 
-    // Glowing red eyes
     ctx.shadowBlur  = 22;
     ctx.shadowColor = '#ff2200';
     ctx.fillStyle   = '#ff2200';
@@ -218,7 +322,6 @@ export class MenuScene extends Phaser.Scene {
       ctx.lineTo(x + w / 2, height);
       ctx.closePath();
       ctx.fill();
-      // Second shorter triangle (double-layered pine)
       ctx.beginPath();
       ctx.moveTo(x, height - h * 0.55);
       ctx.lineTo(x - w * 0.65, height - h * 0.05);
@@ -245,7 +348,6 @@ export class MenuScene extends Phaser.Scene {
     ctx.fillStyle = mist;
     ctx.fillRect(0, height * 0.72, width, height * 0.28);
 
-    // ── Register as Phaser texture ────────────────────────────────────────
     if (this.textures.exists('menu_bg')) this.textures.remove('menu_bg');
     this.textures.addCanvas('menu_bg', canvas);
     this.add.image(0, 0, 'menu_bg').setOrigin(0, 0);

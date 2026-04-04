@@ -29,6 +29,11 @@ import {
   HUNT_RANGE_PX,
   HUNT_PROBS,
 } from '../constants';
+import {
+  GameSettings,
+  DEFAULT_SETTINGS,
+  DAY_SPEED_MS,
+} from '../GameSettings';
 
 export class GameScene extends Phaser.Scene {
   private world!: WorldGenerator;
@@ -54,6 +59,7 @@ export class GameScene extends Phaser.Scene {
   private lastEquippedTool: keyof Inventory | null = null;
   private gameOver = false;
   private worldSeed = NOISE_SEED;
+  private settings: GameSettings = { ...DEFAULT_SETTINGS };
   private soundSystem!: SoundSystem;
   private mobileControls!: MobileControls;
   private uiCam!: Phaser.Cameras.Scene2D.Camera;
@@ -62,8 +68,9 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
-  init(data: { seed?: number }): void {
-    if (data?.seed !== undefined) this.worldSeed = data.seed;
+  init(data: { seed?: number; settings?: GameSettings }): void {
+    if (data?.seed      !== undefined) this.worldSeed = data.seed;
+    if (data?.settings)                this.settings  = data.settings;
   }
 
   create(): void {
@@ -73,7 +80,15 @@ export class GameScene extends Phaser.Scene {
     this.lastDayNumber     = 1;
     this.lastEquippedTool  = null;
     this.resources    = new ResourceSystem();
-    this.timeSystem   = new TimeSystem();
+    this.timeSystem   = new TimeSystem(DAY_SPEED_MS[this.settings.daySpeed], this.settings.dayNightRatio);
+
+    if (this.settings.starterKit) {
+      this.resources.add('axe',   1);
+      this.resources.add('knife', 1);
+      this.resources.add('wood',  5);
+      this.resources.add('stone', 5);
+      this.resources.add('meat',  3);
+    }
     this.world        = new WorldGenerator(MAP_WIDTH, MAP_HEIGHT, this.worldSeed);
     this.soundSystem  = new SoundSystem(this);
 
@@ -216,7 +231,9 @@ export class GameScene extends Phaser.Scene {
 
     spawn([...forestTiles, ...anyTiles], 15, AnimalType.DEER);
     spawn([...swampTiles, ...forestTiles], 10, AnimalType.PIG);
-    spawn([...forestTiles, ...swampTiles, ...anyTiles], 8, AnimalType.WOLF);
+    if (this.settings.wolvesEnabled) {
+      spawn([...forestTiles, ...swampTiles, ...anyTiles], 8, AnimalType.WOLF);
+    }
   }
 
   private renderWorldBackground(): void {
@@ -420,7 +437,7 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (this.gameOver) {
-      if (Phaser.Input.Keyboard.JustDown(this.restartKey)) this.scene.restart();
+      if (Phaser.Input.Keyboard.JustDown(this.restartKey)) this.scene.restart({ seed: this.worldSeed, settings: this.settings });
       return;
     }
     this.timeSystem.update(delta);

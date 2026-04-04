@@ -1,72 +1,65 @@
 import { DAY_DURATION_MS } from '../constants';
+import { DayNightRatio, RATIO_THRESHOLDS } from '../GameSettings';
 
 export type TimeOfDay = 'dawn' | 'day' | 'dusk' | 'night';
 
-// Day schedule (as fraction of 24h):
-//   06:00 = 0.25  dawn starts
-//   08:00 = 0.333 full day
-//   20:00 = 0.833 dusk starts
-//   22:00 = 0.917 full night
-//   06:00 = 0.25  (next day) dawn starts again
-const DAWN_START  = 6  / 24; // 0.250
-const DAY_START   = 8  / 24; // 0.333
-const DUSK_START  = 20 / 24; // 0.833
-const NIGHT_START = 22 / 24; // 0.917
-
 export class TimeSystem {
-  // Start at 08:00
-  private elapsed = DAY_START * DAY_DURATION_MS;
+  private elapsed: number;
   private dayNumber = 1;
+
+  private readonly dayDurationMs: number;
+  private readonly DAWN_START:  number;
+  private readonly DAY_START:   number;
+  private readonly DUSK_START:  number;
+  private readonly NIGHT_START: number;
+
+  constructor(dayDurationMs = DAY_DURATION_MS, ratio: DayNightRatio = '2:1') {
+    this.dayDurationMs = dayDurationMs;
+    [this.DAWN_START, this.DAY_START, this.DUSK_START, this.NIGHT_START] = RATIO_THRESHOLDS[ratio];
+    // Start at the beginning of full daylight
+    this.elapsed = this.DAY_START * dayDurationMs;
+  }
 
   /** 0 = midnight, 1 = next midnight */
   get dayProgress(): number {
-    return this.elapsed / DAY_DURATION_MS;
+    return this.elapsed / this.dayDurationMs;
   }
 
-  get currentDay(): number {
-    return this.dayNumber;
-  }
+  get currentDay(): number { return this.dayNumber; }
 
   get timeOfDay(): TimeOfDay {
     const p = this.dayProgress;
-    if (p >= DAWN_START  && p < DAY_START)   return 'dawn';
-    if (p >= DAY_START   && p < DUSK_START)  return 'day';
-    if (p >= DUSK_START  && p < NIGHT_START) return 'dusk';
+    if (p >= this.DAWN_START  && p < this.DAY_START)   return 'dawn';
+    if (p >= this.DAY_START   && p < this.DUSK_START)  return 'day';
+    if (p >= this.DUSK_START  && p < this.NIGHT_START) return 'dusk';
     return 'night';
   }
 
   /**
    * Darkness alpha: 0 = full daylight, 1 = full dark.
-   * night  00:00–06:00  → 1
-   * dawn   06:00–08:00  → 1..0
-   * day    08:00–20:00  → 0
-   * dusk   20:00–22:00  → 0..1
-   * night  22:00–24:00  → 1
+   * Transitions linearly between 0 and 1 during dawn / dusk.
    */
   get darknessAlpha(): number {
     const p = this.dayProgress;
-
-    if (p < DAWN_START)  return 1;                                          // 00–06 night
-    if (p < DAY_START)   return 1 - (p - DAWN_START) / (DAY_START - DAWN_START);  // 06–08 dawn
-    if (p < DUSK_START)  return 0;                                          // 08–20 day
-    if (p < NIGHT_START) return (p - DUSK_START) / (NIGHT_START - DUSK_START);    // 20–22 dusk
-    return 1;                                                               // 22–24 night
+    if (p < this.DAWN_START)  return 1;
+    if (p < this.DAY_START)   return 1 - (p - this.DAWN_START)  / (this.DAY_START   - this.DAWN_START);
+    if (p < this.DUSK_START)  return 0;
+    if (p < this.NIGHT_START) return     (p - this.DUSK_START)  / (this.NIGHT_START - this.DUSK_START);
+    return 1;
   }
 
-  /** Returns fraction [0,1] representing how complete the day cycle is for HUD display */
-  get clockFraction(): number {
-    return this.dayProgress;
-  }
+  /** Fraction [0,1] of the full day cycle — used by the HUD clock arc. */
+  get clockFraction(): number { return this.dayProgress; }
 
   update(deltaMs: number): void {
     this.elapsed += deltaMs;
-    if (this.elapsed >= DAY_DURATION_MS) {
-      this.elapsed -= DAY_DURATION_MS;
+    if (this.elapsed >= this.dayDurationMs) {
+      this.elapsed -= this.dayDurationMs;
       this.dayNumber++;
     }
   }
 
-  /** Hour-like label for HUD, 0–23 mapped to day progress */
+  /** Hour label (00:00–23:00) for the HUD. */
   get hourLabel(): string {
     const hour = Math.floor(this.dayProgress * 24);
     return `${hour.toString().padStart(2, '0')}:00`;
