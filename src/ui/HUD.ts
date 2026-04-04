@@ -156,7 +156,7 @@ export class HUD {
     return [...this.uiObjects, ...this.toolbelt.getGameObjects()];
   }
 
-  get equippedTool() { return this.toolbelt.equippedTool; }
+  get selectedItem() { return this.toolbelt.selectedItem; }
 
   showGatherHint(show: boolean): void {
     this.toolbelt.showGatherHint(show);

@@ -95,6 +95,7 @@ export class GameScene extends Phaser.Scene {
       this.resources.add('stone', 5);
       this.resources.add('meat',  3);
       this.resources.add('fence', 15);
+      this.resources.add('wall', 15);
     }
     this.world        = new WorldGenerator(MAP_WIDTH, MAP_HEIGHT, this.worldSeed);
     this.soundSystem  = new SoundSystem(this);
@@ -585,17 +586,17 @@ export class GameScene extends Phaser.Scene {
       this.lastDayNumber = currentDay;
     }
 
-    // Sync equipped tool to player (for gather boost)
-    const currentTool = this.hud.equippedTool;
-    this.player.setEquippedTool(currentTool);
+    // Sync selected item to player (for gather boost)
+    const currentItem = this.hud.selectedItem;
+    this.player.setEquippedTool(currentItem);
 
-    // Player tool graphic — reposition each frame, redraw only when tool changes
+    // Player selected-item graphic — reposition each frame, redraw when item changes
     const px2 = this.player.x, py2 = this.player.y;
     this.playerToolGraphic.setPosition(px2 + 22, py2);
-    if (currentTool !== this.lastEquippedTool) {
+    if (currentItem !== this.lastEquippedTool) {
       this.playerToolGraphic.clear();
-      if (currentTool) drawIcon(this.playerToolGraphic, 0, 0, currentTool, 1.1);
-      this.lastEquippedTool = currentTool;
+      if (currentItem) drawIcon(this.playerToolGraphic, 0, 0, currentItem, 1.1);
+      this.lastEquippedTool = currentItem;
     }
 
     // HUD gather hint
@@ -648,12 +649,10 @@ export class GameScene extends Phaser.Scene {
     if (sprite) sprite.setTexture(`fence_m${this.fenceBitmask(tx, ty)}`);
   }
 
-  private placeFence(): void {
+  private placeFence(tx = this.player.tileX, ty = this.player.tileY): void {
     if (!this.resources.has('fence', 1)) return;
-    const tx = this.player.tileX;
-    const ty = this.player.tileY;
-    if (this.world.getTile(tx, ty) !== TileType.GRASS) return; // grass biome only
-    if (!this.fenceSystem.place(tx, ty)) return; // already fenced
+    if (this.world.getTile(tx, ty) !== TileType.GRASS) return;
+    if (!this.fenceSystem.place(tx, ty)) return;
     this.resources.subtract('fence', 1);
 
     const img = this.add.image(
@@ -662,12 +661,8 @@ export class GameScene extends Phaser.Scene {
       `fence_m${this.fenceBitmask(tx, ty)}`,
     ).setDepth(DEPTH_PLAYER + 0.5);
     this.fenceSprites.set(`${tx},${ty}`, img);
-
-    // Update all 4 adjacent fences so they connect to the new one
-    this.updateFenceSprite(tx - 1, ty);
-    this.updateFenceSprite(tx + 1, ty);
-    this.updateFenceSprite(tx,     ty - 1);
-    this.updateFenceSprite(tx,     ty + 1);
+    this.updateFenceSprite(tx - 1, ty); this.updateFenceSprite(tx + 1, ty);
+    this.updateFenceSprite(tx, ty - 1); this.updateFenceSprite(tx, ty + 1);
   }
 
   private placeFire(): void {
@@ -688,12 +683,10 @@ export class GameScene extends Phaser.Scene {
     if (sprite) sprite.setTexture(`wall_m${this.wallBitmask(tx, ty)}`);
   }
 
-  private placeWall(): void {
+  private placeWall(tx = this.player.tileX, ty = this.player.tileY): void {
     if (!this.resources.has('wall', 1)) return;
-    const tx = this.player.tileX;
-    const ty = this.player.tileY;
-    if (this.world.getTile(tx, ty) !== TileType.GRASS) return; // grass biome only
-    if (!this.wallSystem.place(tx, ty)) return; // already a wall there
+    if (this.world.getTile(tx, ty) !== TileType.GRASS) return;
+    if (!this.wallSystem.place(tx, ty)) return;
     this.resources.subtract('wall', 1);
 
     const img = this.add.image(
@@ -702,11 +695,8 @@ export class GameScene extends Phaser.Scene {
       `wall_m${this.wallBitmask(tx, ty)}`,
     ).setDepth(DEPTH_PLAYER + 0.5);
     this.wallSprites.set(`${tx},${ty}`, img);
-
-    this.updateWallSprite(tx - 1, ty);
-    this.updateWallSprite(tx + 1, ty);
-    this.updateWallSprite(tx,     ty - 1);
-    this.updateWallSprite(tx,     ty + 1);
+    this.updateWallSprite(tx - 1, ty); this.updateWallSprite(tx + 1, ty);
+    this.updateWallSprite(tx, ty - 1); this.updateWallSprite(tx, ty + 1);
   }
 
   private resolveHunt(): void {
@@ -754,18 +744,40 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Handle a world-space left click:
-   *   • Click on an animal within hunt range → attack it.
-   *   • Click on a fence tile within reach with axe equipped → pick it up.
+   * Handle a world-space left click based on the selected inventory item:
+   *   • fence/wall selected → place at clicked tile (grass biome, within reach)
+   *   • tool selected → attack animal OR (axe) pick up fence/wall
+   *   • raw material selected → no action
    */
   private handleWorldClick(pointer: Phaser.Input.Pointer): void {
     if (this.gameOver || this.craftingMenu.isOpen) return;
 
+    // Ignore clicks on the toolbelt UI area (bottom 86 px)
+    const TOOLBELT_H = 86;
+    if (pointer.y > this.scale.height - TOOLBELT_H) return;
+
     const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     const px = this.player.x, py = this.player.y;
+    const selected = this.hud.selectedItem;
 
-    // ── Click to attack an animal ────────────────────────────────────────
-    const CLICK_RADIUS = 44; // px — click slop on animal sprite
+    // ── Place fence by click ─────────────────────────────────────────────
+    if (selected === 'fence') {
+      this.placeByClick(wp, px, py, 'fence');
+      return;
+    }
+
+    // ── Place wall by click ──────────────────────────────────────────────
+    if (selected === 'wall') {
+      this.placeByClick(wp, px, py, 'wall');
+      return;
+    }
+
+    // ── Tool actions (attack / pick up) ─────────────────────────────────
+    const TOOLS = new Set<keyof Inventory>(['axe', 'pickaxe', 'knife']);
+    if (!selected || !TOOLS.has(selected)) return;
+
+    // Attack animal within hunt range
+    const CLICK_RADIUS = 44;
     let clickedAnimal: Animal | null = null;
     let best = CLICK_RADIUS;
     for (const animal of this.animals) {
@@ -782,12 +794,12 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // ── Click to pick up a fence or wall (axe must be equipped) ─────────
-    if (this.hud.equippedTool !== 'axe') return;
+    // Axe: pick up fence or wall within reach
+    if (selected !== 'axe') return;
 
     const tx = Math.floor(wp.x / TILE_SIZE);
     const ty = Math.floor(wp.y / TILE_SIZE);
-    const REACH = TILE_SIZE * 3; // 3-tile reach
+    const REACH = TILE_SIZE * 3;
     const cdx = tx * TILE_SIZE + TILE_SIZE / 2 - px;
     const cdy = ty * TILE_SIZE + TILE_SIZE / 2 - py;
     if (cdx * cdx + cdy * cdy > REACH ** 2) return;
@@ -798,33 +810,38 @@ export class GameScene extends Phaser.Scene {
       const key = `${tx},${ty}`;
       this.fenceSprites.get(key)?.destroy();
       this.fenceSprites.delete(key);
-      this.updateFenceSprite(tx - 1, ty);
-      this.updateFenceSprite(tx + 1, ty);
-      this.updateFenceSprite(tx,     ty - 1);
-      this.updateFenceSprite(tx,     ty + 1);
-      const t = this.add.text(wp.x, wp.y - 20, '+1 fence', {
-        fontFamily: 'monospace', fontSize: '13px', color: '#c07a38',
-        stroke: '#000', strokeThickness: 2,
-      }).setDepth(DEPTH_PLAYER + 1);
-      this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
-      return;
-    }
-
-    if (this.wallSystem.has(tx, ty)) {
+      this.updateFenceSprite(tx - 1, ty); this.updateFenceSprite(tx + 1, ty);
+      this.updateFenceSprite(tx, ty - 1); this.updateFenceSprite(tx, ty + 1);
+      this.floatText(wp.x, wp.y, '+1 fence', '#c07a38');
+    } else if (this.wallSystem.has(tx, ty)) {
       this.wallSystem.remove(tx, ty);
       this.resources.add('wall', 1);
       const key = `${tx},${ty}`;
       this.wallSprites.get(key)?.destroy();
       this.wallSprites.delete(key);
-      this.updateWallSprite(tx - 1, ty);
-      this.updateWallSprite(tx + 1, ty);
-      this.updateWallSprite(tx,     ty - 1);
-      this.updateWallSprite(tx,     ty + 1);
-      const t = this.add.text(wp.x, wp.y - 20, '+1 wall', {
-        fontFamily: 'monospace', fontSize: '13px', color: '#8a4a18',
-        stroke: '#000', strokeThickness: 2,
-      }).setDepth(DEPTH_PLAYER + 1);
-      this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+      this.updateWallSprite(tx - 1, ty); this.updateWallSprite(tx + 1, ty);
+      this.updateWallSprite(tx, ty - 1); this.updateWallSprite(tx, ty + 1);
+      this.floatText(wp.x, wp.y, '+1 wall', '#8a4a18');
     }
+  }
+
+  /** Place a fence or wall at the clicked world position, within PLACE_REACH. */
+  private placeByClick(wp: {x: number; y: number}, px: number, py: number, type: 'fence' | 'wall'): void {
+    const PLACE_REACH = TILE_SIZE * 4;
+    const tx = Math.floor(wp.x / TILE_SIZE);
+    const ty = Math.floor(wp.y / TILE_SIZE);
+    const dx = tx * TILE_SIZE + TILE_SIZE / 2 - px;
+    const dy = ty * TILE_SIZE + TILE_SIZE / 2 - py;
+    if (dx * dx + dy * dy > PLACE_REACH ** 2) return;
+    if (type === 'fence') this.placeFence(tx, ty);
+    else                  this.placeWall(tx, ty);
+  }
+
+  private floatText(wx: number, wy: number, msg: string, color: string): void {
+    const t = this.add.text(wx, wy - 20, msg, {
+      fontFamily: 'monospace', fontSize: '13px', color,
+      stroke: '#000', strokeThickness: 2,
+    }).setDepth(DEPTH_PLAYER + 1);
+    this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
 }

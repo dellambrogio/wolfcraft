@@ -12,9 +12,11 @@ const CONTROLS: [string, string][] = [
   ['Z',             'Eat food (restores HP)'],
   ['T',             'Toggle torch'],
   ['F',             'Place campfire'],
+  ['B / V',         'Place fence / wall at feet (grass only)'],
   ['E',             'Open crafting / inventory'],
   ['Esc',           'Close crafting menu'],
-  ['1 – 8',         'Equip hotbar slot'],
+  ['1 – 8',         'Select hotbar slot'],
+  ['Click item',    'Select — click world to use/place'],
   ['R',             'Restart (after death)'],
   ['H',             'Toggle this panel'],
 ];
