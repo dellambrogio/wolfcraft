@@ -13,6 +13,7 @@ export interface Inventory {
   // Placeable items
   fire:       number;
   fence:      number;
+  wall:       number;
   // Cooked food
   cookedMeat: number;
   bread:      number;
@@ -32,6 +33,7 @@ export class ResourceSystem {
     knife:   0,
     fire:       0,
     fence:      0,
+    wall:       0,
     cookedMeat: 0,
     bread:      0,
   };

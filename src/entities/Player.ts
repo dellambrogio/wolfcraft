@@ -14,6 +14,7 @@ import { ResourceSystem } from '../systems/ResourceSystem';
 import { MapObjects } from '../world/MapObjects';
 import { MobileControls } from '../ui/MobileControls';
 import { FenceSystem } from '../world/FenceSystem';
+import { WallSystem } from '../world/WallSystem';
 
 export class Player {
   private scene: Phaser.Scene;
@@ -22,6 +23,7 @@ export class Player {
   private mapObjects: MapObjects;
   private mobile: MobileControls | null = null;
   private fences: FenceSystem | null = null;
+  private walls:  WallSystem  | null = null;
 
   readonly sprite: Phaser.GameObjects.Sprite;
 
@@ -44,6 +46,7 @@ export class Player {
   private huntKey!:      Phaser.Input.Keyboard.Key;
   private firePlaceKey!:  Phaser.Input.Keyboard.Key;
   private fencePlaceKey!: Phaser.Input.Keyboard.Key;
+  private wallPlaceKey!:  Phaser.Input.Keyboard.Key;
   private eatKey!:       Phaser.Input.Keyboard.Key;
   private shiftKey!:     Phaser.Input.Keyboard.Key;
 
@@ -55,6 +58,7 @@ export class Player {
   private currentMoveDuration = TILE_MOVE_MS;
   private _wantsToPlaceFire  = false;
   private _wantsToPlaceFence = false;
+  private _wantsToPlaceWall  = false;
   private _health = 100;
   readonly maxHealth = 100;
 
@@ -109,6 +113,14 @@ export class Player {
     return v;
   }
 
+  /** Set when the player picks up a wall with an axe; consumed once by GameScene. */
+  private _gatheredWallTile: { tx: number; ty: number } | null = null;
+  get gatheredWallTile(): { tx: number; ty: number } | null {
+    const v = this._gatheredWallTile;
+    this._gatheredWallTile = null;
+    return v;
+  }
+
   constructor(
     scene: Phaser.Scene,
     startTx: number,
@@ -118,6 +130,7 @@ export class Player {
     mapObjects: MapObjects,
     mobile: MobileControls | null = null,
     fences: FenceSystem | null = null,
+    walls:  WallSystem  | null = null,
   ) {
     this.scene = scene;
     this.world = world;
@@ -125,6 +138,7 @@ export class Player {
     this.mapObjects = mapObjects;
     this.mobile = mobile;
     this.fences = fences;
+    this.walls  = walls;
 
     this._tx = startTx;
     this._ty = startTy;
@@ -179,6 +193,7 @@ export class Player {
     this.huntKey       = kb.addKey(Phaser.Input.Keyboard.KeyCodes.K);
     this.firePlaceKey  = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F);
     this.fencePlaceKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.B);
+    this.wallPlaceKey  = kb.addKey(Phaser.Input.Keyboard.KeyCodes.V);
     this.eatKey        = kb.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
     this.shiftKey      = kb.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
   }
@@ -215,6 +230,13 @@ export class Player {
   get wantsToPlaceFence(): boolean {
     const v = this._wantsToPlaceFence;
     this._wantsToPlaceFence = false;
+    return v;
+  }
+
+  /** Consumed once by GameScene to place a wall at the player's tile. */
+  get wantsToPlaceWall(): boolean {
+    const v = this._wantsToPlaceWall;
+    this._wantsToPlaceWall = false;
     return v;
   }
 
@@ -303,6 +325,11 @@ export class Player {
       this._wantsToPlaceFence = true;
     }
 
+    // --- Place wall ---
+    if (Phaser.Input.Keyboard.JustDown(this.wallPlaceKey)) {
+      this._wantsToPlaceWall = true;
+    }
+
     // --- Eat ---
     if (Phaser.Input.Keyboard.JustDown(this.eatKey) || this.mobile?.justEat) {
       this.tryEat();
@@ -336,6 +363,9 @@ export class Player {
       moveDuration = TILE_MOVE_MS * WATER_SPEED_MULT[depth - 1];
     }
 
+    // Walls block the player
+    if (this.walls?.has(nx, ny)) return;
+
     if (this._sneaking) moveDuration *= SNEAK_SPEED_MULT;
 
     this.targetTx = nx;
@@ -351,6 +381,7 @@ export class Player {
 
   private checkNearGatherable(): boolean {
     if (this.fences?.has(this._tx, this._ty) && this._equippedTool === 'axe') return true;
+    if (this.walls?.has(this._tx, this._ty)  && this._equippedTool === 'axe') return true;
     if (this.world.hasGrassItem(this._tx, this._ty)) return true;
     if (this.world.hasWheatItem(this._tx, this._ty)) return true;
     if (this.world.hasStoneItem(this._tx, this._ty)) return true;
@@ -361,6 +392,7 @@ export class Player {
 
   private findGatherableResource(): string | null {
     if (this.fences?.has(this._tx, this._ty) && this._equippedTool === 'axe') return 'fence';
+    if (this.walls?.has(this._tx, this._ty)  && this._equippedTool === 'axe') return 'wall';
     if (this.world.hasGrassItem(this._tx, this._ty)) return 'grass';
     if (this.world.hasWheatItem(this._tx, this._ty)) return 'wheat_item';
     if (this.world.hasStoneItem(this._tx, this._ty)) return 'stone_item';
@@ -411,6 +443,15 @@ export class Player {
       this.resources.add('fence', 1);
       this._gatheredFenceTile = { tx: this._tx, ty: this._ty };
       this.showGatherFeedback('+1 fence');
+      return;
+    }
+
+    // Wall — picked up with axe equipped
+    if (resource === 'wall') {
+      this.walls!.remove(this._tx, this._ty);
+      this.resources.add('wall', 1);
+      this._gatheredWallTile = { tx: this._tx, ty: this._ty };
+      this.showGatherFeedback('+1 wall');
       return;
     }
 

@@ -8,7 +8,7 @@ const TOOL_KEYS = new Set<keyof Inventory>(['axe', 'pickaxe', 'knife']);
 
 const INVENTORY_KEYS: Array<keyof Inventory> = [
   'wood', 'stone', 'water', 'grass', 'wheat', 'meat', 'cookedMeat', 'bread',
-  'axe', 'pickaxe', 'knife', 'fire', 'fence',
+  'axe', 'pickaxe', 'knife', 'fire', 'fence', 'wall',
 ];
 
 const NUM_SLOTS = 8;

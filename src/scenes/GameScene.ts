@@ -14,6 +14,7 @@ import { SoundSystem } from '../systems/SoundSystem';
 import { NightPipeline } from '../pipelines/NightPipeline';
 import { Fire } from '../entities/Fire';
 import { FenceSystem } from '../world/FenceSystem';
+import { WallSystem } from '../world/WallSystem';
 import { drawIcon } from '../ui/drawIcon';
 import { Inventory } from '../systems/ResourceSystem';
 import { MobileControls } from '../ui/MobileControls';
@@ -55,6 +56,8 @@ export class GameScene extends Phaser.Scene {
   private fires: Fire[] = [];
   private fenceSystem!: FenceSystem;
   private fenceSprites = new Map<string, Phaser.GameObjects.Image>();
+  private wallSystem!:  WallSystem;
+  private wallSprites  = new Map<string, Phaser.GameObjects.Image>();
   private grassItemSprites = new Map<string, Phaser.GameObjects.Image>();
   private wheatItemSprites = new Map<string, Phaser.GameObjects.Image>();
   private stoneItemSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -101,6 +104,8 @@ export class GameScene extends Phaser.Scene {
     this.stoneItemSprites.clear();
     this.fenceSprites.clear();
     this.fenceSystem = new FenceSystem();
+    this.wallSprites.clear();
+    this.wallSystem  = new WallSystem();
     this.renderWorldBackground();
     this.renderWaterDepth();
     this.renderWorld();
@@ -116,7 +121,7 @@ export class GameScene extends Phaser.Scene {
 
     // Spawn player at a walkable tile near center
     const { tx, ty } = this.world.findSpawnTile();
-    this.player = new Player(this, tx, ty, this.world, this.resources, this.mapObjects, this.mobileControls, this.fenceSystem);
+    this.player = new Player(this, tx, ty, this.world, this.resources, this.mapObjects, this.mobileControls, this.fenceSystem, this.wallSystem);
 
     // World-space tool graphic (follows player, redrawn when tool changes)
     this.playerToolGraphic = this.add.graphics().setDepth(DEPTH_PLAYER + 0.5);
@@ -196,6 +201,7 @@ export class GameScene extends Phaser.Scene {
           this.soundSystem,
           { tx: hole.tx, ty: hole.ty },
           this.fenceSystem,
+          this.wallSystem,
         ));
       }
     }
@@ -237,6 +243,7 @@ export class GameScene extends Phaser.Scene {
           this.soundSystem,
           undefined,
           this.fenceSystem,
+          this.wallSystem,
         ));
       }
     };
@@ -508,9 +515,20 @@ export class GameScene extends Phaser.Scene {
         this.updateFenceSprite(ftx,     fty - 1);
         this.updateFenceSprite(ftx,     fty + 1);
       }
+      const gatheredWall = this.player.gatheredWallTile;
+      if (gatheredWall) {
+        const { tx: wtx, ty: wty } = gatheredWall;
+        this.wallSprites.get(`${wtx},${wty}`)?.destroy();
+        this.wallSprites.delete(`${wtx},${wty}`);
+        this.updateWallSprite(wtx - 1, wty);
+        this.updateWallSprite(wtx + 1, wty);
+        this.updateWallSprite(wtx,     wty - 1);
+        this.updateWallSprite(wtx,     wty + 1);
+      }
       if (this.player.wantsToHunt) this.resolveHunt();
       if (this.player.wantsToPlaceFire) this.placeFire();
       if (this.player.wantsToPlaceFence) this.placeFence();
+      if (this.player.wantsToPlaceWall)  this.placeWall();
     }
     // Update fires, prune expired
     for (const fire of this.fires) fire.update(delta);
@@ -634,6 +652,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.resources.has('fence', 1)) return;
     const tx = this.player.tileX;
     const ty = this.player.tileY;
+    if (this.world.getTile(tx, ty) !== TileType.GRASS) return; // grass biome only
     if (!this.fenceSystem.place(tx, ty)) return; // already fenced
     this.resources.subtract('fence', 1);
 
@@ -655,6 +674,39 @@ export class GameScene extends Phaser.Scene {
     if (!this.resources.has('fire', 1)) return;
     this.resources.subtract('fire', 1);
     this.fires.push(new Fire(this, this.player.tileX, this.player.tileY));
+  }
+
+  private wallBitmask(tx: number, ty: number): number {
+    return (this.wallSystem.has(tx,     ty - 1) ? 1 : 0)
+         | (this.wallSystem.has(tx + 1, ty)     ? 2 : 0)
+         | (this.wallSystem.has(tx,     ty + 1) ? 4 : 0)
+         | (this.wallSystem.has(tx - 1, ty)     ? 8 : 0);
+  }
+
+  private updateWallSprite(tx: number, ty: number): void {
+    const sprite = this.wallSprites.get(`${tx},${ty}`);
+    if (sprite) sprite.setTexture(`wall_m${this.wallBitmask(tx, ty)}`);
+  }
+
+  private placeWall(): void {
+    if (!this.resources.has('wall', 1)) return;
+    const tx = this.player.tileX;
+    const ty = this.player.tileY;
+    if (this.world.getTile(tx, ty) !== TileType.GRASS) return; // grass biome only
+    if (!this.wallSystem.place(tx, ty)) return; // already a wall there
+    this.resources.subtract('wall', 1);
+
+    const img = this.add.image(
+      tx * TILE_SIZE + TILE_SIZE / 2,
+      ty * TILE_SIZE + TILE_SIZE / 2,
+      `wall_m${this.wallBitmask(tx, ty)}`,
+    ).setDepth(DEPTH_PLAYER + 0.5);
+    this.wallSprites.set(`${tx},${ty}`, img);
+
+    this.updateWallSprite(tx - 1, ty);
+    this.updateWallSprite(tx + 1, ty);
+    this.updateWallSprite(tx,     ty - 1);
+    this.updateWallSprite(tx,     ty + 1);
   }
 
   private resolveHunt(): void {
@@ -730,32 +782,49 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // ── Click to pick up a fence (axe must be equipped) ──────────────────
+    // ── Click to pick up a fence or wall (axe must be equipped) ─────────
     if (this.hud.equippedTool !== 'axe') return;
 
     const tx = Math.floor(wp.x / TILE_SIZE);
     const ty = Math.floor(wp.y / TILE_SIZE);
-    if (!this.fenceSystem.has(tx, ty)) return;
+    const REACH = TILE_SIZE * 3; // 3-tile reach
+    const cdx = tx * TILE_SIZE + TILE_SIZE / 2 - px;
+    const cdy = ty * TILE_SIZE + TILE_SIZE / 2 - py;
+    if (cdx * cdx + cdy * cdy > REACH ** 2) return;
 
-    const FENCE_REACH = TILE_SIZE * 3; // 3-tile reach
-    const fdx = tx * TILE_SIZE + TILE_SIZE / 2 - px;
-    const fdy = ty * TILE_SIZE + TILE_SIZE / 2 - py;
-    if (fdx * fdx + fdy * fdy > FENCE_REACH ** 2) return;
+    if (this.fenceSystem.has(tx, ty)) {
+      this.fenceSystem.remove(tx, ty);
+      this.resources.add('fence', 1);
+      const key = `${tx},${ty}`;
+      this.fenceSprites.get(key)?.destroy();
+      this.fenceSprites.delete(key);
+      this.updateFenceSprite(tx - 1, ty);
+      this.updateFenceSprite(tx + 1, ty);
+      this.updateFenceSprite(tx,     ty - 1);
+      this.updateFenceSprite(tx,     ty + 1);
+      const t = this.add.text(wp.x, wp.y - 20, '+1 fence', {
+        fontFamily: 'monospace', fontSize: '13px', color: '#c07a38',
+        stroke: '#000', strokeThickness: 2,
+      }).setDepth(DEPTH_PLAYER + 1);
+      this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+      return;
+    }
 
-    this.fenceSystem.remove(tx, ty);
-    this.resources.add('fence', 1);
-    const key = `${tx},${ty}`;
-    this.fenceSprites.get(key)?.destroy();
-    this.fenceSprites.delete(key);
-    this.updateFenceSprite(tx - 1, ty);
-    this.updateFenceSprite(tx + 1, ty);
-    this.updateFenceSprite(tx,     ty - 1);
-    this.updateFenceSprite(tx,     ty + 1);
-
-    const t = this.add.text(wp.x, wp.y - 20, '+1 fence', {
-      fontFamily: 'monospace', fontSize: '13px', color: '#c07a38',
-      stroke: '#000', strokeThickness: 2,
-    }).setDepth(DEPTH_PLAYER + 1);
-    this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+    if (this.wallSystem.has(tx, ty)) {
+      this.wallSystem.remove(tx, ty);
+      this.resources.add('wall', 1);
+      const key = `${tx},${ty}`;
+      this.wallSprites.get(key)?.destroy();
+      this.wallSprites.delete(key);
+      this.updateWallSprite(tx - 1, ty);
+      this.updateWallSprite(tx + 1, ty);
+      this.updateWallSprite(tx,     ty - 1);
+      this.updateWallSprite(tx,     ty + 1);
+      const t = this.add.text(wp.x, wp.y - 20, '+1 wall', {
+        fontFamily: 'monospace', fontSize: '13px', color: '#8a4a18',
+        stroke: '#000', strokeThickness: 2,
+      }).setDepth(DEPTH_PLAYER + 1);
+      this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+    }
   }
 }

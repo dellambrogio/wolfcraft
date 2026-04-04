@@ -61,7 +61,7 @@ src/
 ```
 Resources:  wood, stone, water, grass, wheat, meat, vegetables
 Tools:      axe (wood), pickaxe (stone), knife (hunting)
-Placeable:  fire
+Placeable:  fire, fence (grass biome only), wall (grass biome only)
 Cooked:     cookedMeat, bread
 ```
 
@@ -96,7 +96,8 @@ Cooked:     cookedMeat, bread
 | Z | Eat food |
 | T | Toggle torch |
 | F | Place campfire |
-| B | Place fence |
+| B | Place fence (grass only) |
+| V | Place wall (grass only, blocks player + animals) |
 | E | Crafting/inventory |
 | H | Help panel |
 | 1–8 | Hotbar slot |

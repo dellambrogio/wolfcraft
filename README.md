@@ -53,7 +53,8 @@ Open your browser at **http://localhost:5173**
 | `Z` | Eat food (restores HP) |
 | `T` | Toggle torch |
 | `F` | Place campfire |
-| `B` | Place fence |
+| `B` | Place fence (grass biome only) |
+| `V` | Place wall (grass biome only, blocks movement) |
 | `E` | Open crafting / inventory |
 | `Esc` | Close crafting menu |
 | `1` – `8` | Equip hotbar slot |

@@ -386,6 +386,79 @@ export function drawFenceVariant(ctx: CanvasRenderingContext2D, w: number, h: nu
   ctx.fillRect(cx - pw / 2, cy - ph / 2, pw, 3);
 }
 
+/**
+ * Draw one of 16 wood-wall connectivity variants.
+ * pattern bitmask: bit0=top, bit1=right, bit2=bottom, bit3=left neighbor.
+ * Solid plank segments extend from center toward each connected neighbor.
+ * Blocks both player and animal movement.
+ */
+export function drawWallVariant(ctx: CanvasRenderingContext2D, w: number, h: number, pattern: number): void {
+  const cx = w / 2 | 0;
+  const cy = h / 2 | 0;
+
+  const hasTop    = (pattern & 1) !== 0;
+  const hasRight  = (pattern & 2) !== 0;
+  const hasBottom = (pattern & 4) !== 0;
+  const hasLeft   = (pattern & 8) !== 0;
+  const hasH      = hasLeft || hasRight;
+
+  const TH = 20; // wall thickness in pixels
+  const HALF = TH / 2;
+
+  // Ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.30)';
+  ctx.beginPath();
+  ctx.ellipse(cx + 2, cy + 11, hasH ? w * 0.42 : 10, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Horizontal plank segments
+  const drawHSeg = (x0: number, len: number) => {
+    ctx.fillStyle = '#8a4a18';
+    ctx.fillRect(x0, cy - HALF, len, TH);
+    // Plank grain lines
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(x0, cy - HALF + 6,  len, 1);
+    ctx.fillRect(x0, cy - HALF + 13, len, 1);
+    // Top edge (dark cap)
+    ctx.fillStyle = '#5a2e08';
+    ctx.fillRect(x0, cy - HALF, len, 2);
+    // Bottom highlight
+    ctx.fillStyle = '#b06020';
+    ctx.fillRect(x0, cy + HALF - 3, len, 2);
+  };
+  if (hasLeft)  drawHSeg(0,  cx);
+  if (hasRight) drawHSeg(cx, w - cx);
+
+  // Vertical log segments
+  const drawVSeg = (y0: number, len: number) => {
+    ctx.fillStyle = '#7a3e10';
+    ctx.fillRect(cx - HALF, y0, TH, len);
+    // Grain lines
+    ctx.fillStyle = '#9c5020';
+    ctx.fillRect(cx - HALF + 4,  y0, 3, len);
+    ctx.fillRect(cx - HALF + 11, y0, 3, len);
+    // Left edge (dark)
+    ctx.fillStyle = '#4a2808';
+    ctx.fillRect(cx - HALF, y0, 2, len);
+    // Right edge highlight
+    ctx.fillStyle = 'rgba(180,100,40,0.35)';
+    ctx.fillRect(cx + HALF - 2, y0, 2, len);
+  };
+  if (hasTop)    drawVSeg(0,  cy);
+  if (hasBottom) drawVSeg(cy, h - cy);
+
+  // Center block (drawn over all segments)
+  ctx.fillStyle = '#8a4a18';
+  ctx.fillRect(cx - HALF, cy - HALF, TH, TH);
+  ctx.fillStyle = '#9c5020';
+  ctx.fillRect(cx - HALF + 4,  cy - HALF, 3, TH);
+  ctx.fillRect(cx - HALF + 11, cy - HALF, 3, TH);
+  ctx.fillStyle = '#5a2e08';
+  ctx.fillRect(cx - HALF, cy - HALF, TH, 3);          // top cap
+  ctx.fillStyle = '#b06020';
+  ctx.fillRect(cx - HALF, cy + HALF - 3, TH, 3);      // bottom highlight
+}
+
 export function drawReed(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const mx = w / 2;
 

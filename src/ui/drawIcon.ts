@@ -146,6 +146,24 @@ export function drawIcon(
       g.fillRect(cx - r(16), cy + r(5),  r(32), r(2));
       break;
 
+    case 'wall':
+      // Solid wood panel with plank lines
+      g.fillStyle(0x8a4a18, 1);
+      g.fillRect(cx - r(16), cy - r(14), r(32), r(28));
+      // Plank grain lines
+      g.fillStyle(0x9c5020, 1);
+      g.fillRect(cx - r(16), cy - r(5), r(32), r(3));
+      g.fillRect(cx - r(16), cy + r(6), r(32), r(3));
+      // Top cap (dark)
+      g.fillStyle(0x5a2e08, 1);
+      g.fillRect(cx - r(16), cy - r(14), r(32), r(3));
+      // Left edge (dark)
+      g.fillRect(cx - r(16), cy - r(14), r(3), r(28));
+      // Highlight
+      g.fillStyle(0xb06020, 1);
+      g.fillRect(cx - r(13), cy - r(11), r(26), r(3));
+      break;
+
     case 'cookedMeat':
       // Stick / skewer
       g.fillStyle(0x8B4513, 1);
