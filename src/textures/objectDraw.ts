@@ -333,6 +333,59 @@ export function drawSnowPine(ctx: CanvasRenderingContext2D, w: number, h: number
   }
 }
 
+/**
+ * Draw one of 16 fence connectivity variants.
+ * pattern bitmask: bit0=top, bit1=right, bit2=bottom, bit3=left neighbor.
+ * Rails extend from center to each connected edge; a center post anchors them.
+ */
+export function drawFenceVariant(ctx: CanvasRenderingContext2D, w: number, h: number, pattern: number): void {
+  const cx = w / 2 | 0;
+  const cy = h / 2 | 0;
+
+  const hasTop    = (pattern & 1) !== 0;
+  const hasRight  = (pattern & 2) !== 0;
+  const hasBottom = (pattern & 4) !== 0;
+  const hasLeft   = (pattern & 8) !== 0;
+  const hasH      = hasLeft || hasRight;
+
+  // Ground shadow (elongated under horizontal rails)
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(cx + 2, cy + 9, hasH ? w * 0.38 : 6, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Horizontal rail half-segments ─────────────────────────────────────
+  const drawHRail = (x0: number, len: number) => {
+    ctx.fillStyle = '#9c5e28';
+    ctx.fillRect(x0, cy - 4, len, 8);
+    ctx.fillStyle = '#c07a38';   // top highlight
+    ctx.fillRect(x0, cy - 4, len, 2);
+    ctx.fillStyle = '#5a3010';   // bottom shadow
+    ctx.fillRect(x0, cy + 3,  len, 1);
+  };
+  if (hasLeft)  drawHRail(0,  cx);
+  if (hasRight) drawHRail(cx, cx);
+
+  // ── Vertical post half-segments ───────────────────────────────────────
+  const drawVPost = (y0: number, len: number) => {
+    ctx.fillStyle = '#6b3910';
+    ctx.fillRect(cx - 4, y0, 8, len);
+    ctx.fillStyle = '#8c4e1a';   // grain line
+    ctx.fillRect(cx - 2, y0, 3, len);
+  };
+  if (hasTop)    drawVPost(0,  cy);
+  if (hasBottom) drawVPost(cy, cy);
+
+  // ── Center post (drawn over all rails/posts) ───────────────────────────
+  const pw = 10, ph = 16;
+  ctx.fillStyle = '#6b3910';
+  ctx.fillRect(cx - pw / 2, cy - ph / 2, pw, ph);
+  ctx.fillStyle = '#8c4e1a';                          // grain
+  ctx.fillRect(cx - pw / 2 + 2, cy - ph / 2, 3, ph);
+  ctx.fillStyle = '#a86030';                          // cap
+  ctx.fillRect(cx - pw / 2, cy - ph / 2, pw, 3);
+}
+
 export function drawReed(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   const mx = w / 2;
 

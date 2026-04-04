@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { TILE_SIZE, FIRE_WOLF_REPEL_RADIUS, HUNT_RANGE_PX, SNEAK_AWARENESS_MULT } from '../constants';
 import { WorldGenerator } from '../world/WorldGenerator';
 import { TILE_META, TileType } from '../world/TileTypes';
+import { FenceSystem } from '../world/FenceSystem';
 import { TimeOfDay } from '../systems/TimeSystem';
 import { SoundSystem } from '../systems/SoundSystem';
 
@@ -112,6 +113,7 @@ export class Animal {
   private homeTy: number | null = null;
   private static readonly HOME_RADIUS = 5; // max tiles from hole while wandering
 
+  private fences: FenceSystem | null = null;
   private _dead = false;
   private _type: AnimalType;
   private lastBiteMs = 0;
@@ -134,12 +136,14 @@ export class Animal {
     depth: number,
     soundSystem?: SoundSystem,
     home?: { tx: number; ty: number },
+    fences?: FenceSystem,
   ) {
     this.scene       = scene;
     this.world       = world;
     this.cfg         = CONFIGS[type];
     this._type       = type;
     this.soundSystem = soundSystem ?? null;
+    this.fences      = fences ?? null;
     if (home) { this.homeTx = home.tx; this.homeTy = home.ty; }
     // Stagger ambient sounds so all animals don't play at once
     this.soundTimer  = Phaser.Math.Between(2000, 10000);
@@ -548,7 +552,7 @@ export class Animal {
       { tx: this._tx,     ty: this._ty + 1 },
     ].filter(c => {
       const tile = this.world.getTile(c.tx, c.ty);
-      return TILE_META[tile].walkable && tile !== TileType.WATER;
+      return TILE_META[tile].walkable && tile !== TileType.WATER && !this.fences?.has(c.tx, c.ty);
     });
 
     if (candidates.length === 0) return null;
@@ -583,7 +587,7 @@ export class Animal {
       { tx,         ty: ty + 1 },
     ].filter(c => {
       const tile = this.world.getTile(c.tx, c.ty);
-      return TILE_META[tile].walkable && tile !== TileType.WATER;
+      return TILE_META[tile].walkable && tile !== TileType.WATER && !this.fences?.has(c.tx, c.ty);
     });
 
     // Restrict hole-bound rabbits to wander within HOME_RADIUS of their hole

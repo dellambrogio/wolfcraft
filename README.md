@@ -53,6 +53,7 @@ Open your browser at **http://localhost:5173**
 | `Z` | Eat food (restores HP) |
 | `T` | Toggle torch |
 | `F` | Place campfire |
+| `B` | Place fence |
 | `E` | Open crafting / inventory |
 | `Esc` | Close crafting menu |
 | `1` – `8` | Equip hotbar slot |

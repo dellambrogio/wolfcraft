@@ -96,6 +96,7 @@ Cooked:     cookedMeat, bread
 | Z | Eat food |
 | T | Toggle torch |
 | F | Place campfire |
+| B | Place fence |
 | E | Crafting/inventory |
 | H | Help panel |
 | 1–8 | Hotbar slot |

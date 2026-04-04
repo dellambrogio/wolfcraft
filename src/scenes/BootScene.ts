@@ -3,7 +3,7 @@ import { TILE_SIZE } from '../constants';
 import { TileType } from '../world/TileTypes';
 import { genMaskedVariants, addTileTexture } from '../textures/textureUtils';
 import { drawGrass, drawWater, drawForest, drawMountain, drawDesert, drawSnow, drawSwamp, drawWheat } from '../textures/tileDraw';
-import { drawGrassItem, drawWheatItem, drawStoneItem, drawRabbitHole, drawTree, drawRock, drawCactus, drawSnowPine, drawReed } from '../textures/objectDraw';
+import { drawGrassItem, drawWheatItem, drawStoneItem, drawRabbitHole, drawTree, drawRock, drawCactus, drawSnowPine, drawReed, drawFenceVariant } from '../textures/objectDraw';
 import { createAnimalSpritesheet, drawDeer, drawRabbit, drawPig, drawWolf } from '../textures/animalDraw';
 import { createPlayerSpritesheet } from '../textures/playerDraw';
 
@@ -47,6 +47,10 @@ export class BootScene extends Phaser.Scene {
     addTileTexture(tex, 'cactus',    18, 34, drawCactus);
     addTileTexture(tex, 'snow_pine', 30, 42, drawSnowPine);
     addTileTexture(tex, 'reed',      14, 32, drawReed);
+    // Fence — 16 connectivity-masked variants (bit0=top, bit1=right, bit2=bottom, bit3=left)
+    for (let p = 0; p < 16; p++) {
+      addTileTexture(tex, `fence_m${p}`, TILE_SIZE, TILE_SIZE, (ctx, w, h) => drawFenceVariant(ctx, w, h, p));
+    }
 
     // Animals — 3-frame spritesheets (idle + 2 walk steps)
     // liftingFactor: fraction of leg height lifted per step [0..1]

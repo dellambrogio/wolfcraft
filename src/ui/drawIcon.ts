@@ -127,6 +127,25 @@ export function drawIcon(
       g.fillStyle(0xe8b050, 0.6); g.fillEllipse(cx - r(4), cy - r(6), r(10), r(5));
       break;
 
+    case 'fence':
+      // Posts
+      g.fillStyle(0x6b3910, 1);
+      g.fillRect(cx - r(16), cy - r(14), r(7), r(28));
+      g.fillRect(cx + r(9),  cy - r(14), r(7), r(28));
+      // Post mid-tone
+      g.fillStyle(0x8c4e1a, 1);
+      g.fillRect(cx - r(14), cy - r(14), r(3), r(28));
+      g.fillRect(cx + r(11), cy - r(14), r(3), r(28));
+      // Rails
+      g.fillStyle(0x9c5e28, 1);
+      g.fillRect(cx - r(16), cy - r(8),  r(32), r(6));
+      g.fillRect(cx - r(16), cy + r(5),  r(32), r(6));
+      // Rail highlights
+      g.fillStyle(0xc07a38, 1);
+      g.fillRect(cx - r(16), cy - r(8),  r(32), r(2));
+      g.fillRect(cx - r(16), cy + r(5),  r(32), r(2));
+      break;
+
     case 'cookedMeat':
       // Stick / skewer
       g.fillStyle(0x8B4513, 1);

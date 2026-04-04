@@ -78,6 +78,7 @@ export class CraftingMenu {
       { output: 'pickaxe',  name: 'Pickaxe',   cost: [{ key: 'wood', amount: 3 }, { key: 'stone', amount: 4 }] },
       { output: 'knife',    name: 'Knife',     cost: [{ key: 'wood', amount: 1 }, { key: 'stone', amount: 1 }, { key: 'grass', amount: 2 }] },
       { output: 'fire',     name: 'Campfire',  cost: [{ key: 'wood', amount: 4 }, { key: 'stone', amount: 2 }] },
+      { output: 'fence',    name: 'Fence',     cost: [{ key: 'wood', amount: 2 }] },
       {
         output: 'cookedMeat', name: 'Cook Meat',
         cost:   [{ key: 'meat', amount: 1 }],

@@ -13,6 +13,7 @@ import { TILE_META, TileType } from '../world/TileTypes';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { MapObjects } from '../world/MapObjects';
 import { MobileControls } from '../ui/MobileControls';
+import { FenceSystem } from '../world/FenceSystem';
 
 export class Player {
   private scene: Phaser.Scene;
@@ -20,6 +21,7 @@ export class Player {
   private resources: ResourceSystem;
   private mapObjects: MapObjects;
   private mobile: MobileControls | null = null;
+  private fences: FenceSystem | null = null;
 
   readonly sprite: Phaser.GameObjects.Sprite;
 
@@ -40,7 +42,8 @@ export class Player {
   private gatherKey!:    Phaser.Input.Keyboard.Key;
   private torchKey!:     Phaser.Input.Keyboard.Key;
   private huntKey!:      Phaser.Input.Keyboard.Key;
-  private firePlaceKey!: Phaser.Input.Keyboard.Key;
+  private firePlaceKey!:  Phaser.Input.Keyboard.Key;
+  private fencePlaceKey!: Phaser.Input.Keyboard.Key;
   private eatKey!:       Phaser.Input.Keyboard.Key;
   private shiftKey!:     Phaser.Input.Keyboard.Key;
 
@@ -50,7 +53,8 @@ export class Player {
   private _wantsToHunt = false;
   private _sneaking = false;
   private currentMoveDuration = TILE_MOVE_MS;
-  private _wantsToPlaceFire = false;
+  private _wantsToPlaceFire  = false;
+  private _wantsToPlaceFence = false;
   private _health = 100;
   readonly maxHealth = 100;
 
@@ -97,6 +101,14 @@ export class Player {
     return v;
   }
 
+  /** Set when the player picks up a fence with an axe; consumed once by GameScene. */
+  private _gatheredFenceTile: { tx: number; ty: number } | null = null;
+  get gatheredFenceTile(): { tx: number; ty: number } | null {
+    const v = this._gatheredFenceTile;
+    this._gatheredFenceTile = null;
+    return v;
+  }
+
   constructor(
     scene: Phaser.Scene,
     startTx: number,
@@ -105,12 +117,14 @@ export class Player {
     resources: ResourceSystem,
     mapObjects: MapObjects,
     mobile: MobileControls | null = null,
+    fences: FenceSystem | null = null,
   ) {
     this.scene = scene;
     this.world = world;
     this.resources = resources;
     this.mapObjects = mapObjects;
     this.mobile = mobile;
+    this.fences = fences;
 
     this._tx = startTx;
     this._ty = startTy;
@@ -160,12 +174,13 @@ export class Player {
       left:  kb.addKey(Phaser.Input.Keyboard.KeyCodes.A),
       right: kb.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
-    this.gatherKey    = kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
-    this.torchKey     = kb.addKey(Phaser.Input.Keyboard.KeyCodes.T);
-    this.huntKey      = kb.addKey(Phaser.Input.Keyboard.KeyCodes.K);
-    this.firePlaceKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F);
-    this.eatKey       = kb.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
-    this.shiftKey     = kb.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+    this.gatherKey     = kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
+    this.torchKey      = kb.addKey(Phaser.Input.Keyboard.KeyCodes.T);
+    this.huntKey       = kb.addKey(Phaser.Input.Keyboard.KeyCodes.K);
+    this.firePlaceKey  = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F);
+    this.fencePlaceKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.B);
+    this.eatKey        = kb.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
+    this.shiftKey      = kb.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
   }
 
   get x(): number { return this.sprite.x; }
@@ -193,6 +208,13 @@ export class Player {
   get wantsToPlaceFire(): boolean {
     const v = this._wantsToPlaceFire;
     this._wantsToPlaceFire = false;
+    return v;
+  }
+
+  /** Consumed once by GameScene to place a fence at the player's tile. */
+  get wantsToPlaceFence(): boolean {
+    const v = this._wantsToPlaceFence;
+    this._wantsToPlaceFence = false;
     return v;
   }
 
@@ -276,6 +298,11 @@ export class Player {
       this._wantsToPlaceFire = true;
     }
 
+    // --- Place fence ---
+    if (Phaser.Input.Keyboard.JustDown(this.fencePlaceKey)) {
+      this._wantsToPlaceFence = true;
+    }
+
     // --- Eat ---
     if (Phaser.Input.Keyboard.JustDown(this.eatKey) || this.mobile?.justEat) {
       this.tryEat();
@@ -323,6 +350,7 @@ export class Player {
   };
 
   private checkNearGatherable(): boolean {
+    if (this.fences?.has(this._tx, this._ty) && this._equippedTool === 'axe') return true;
     if (this.world.hasGrassItem(this._tx, this._ty)) return true;
     if (this.world.hasWheatItem(this._tx, this._ty)) return true;
     if (this.world.hasStoneItem(this._tx, this._ty)) return true;
@@ -332,6 +360,7 @@ export class Player {
   }
 
   private findGatherableResource(): string | null {
+    if (this.fences?.has(this._tx, this._ty) && this._equippedTool === 'axe') return 'fence';
     if (this.world.hasGrassItem(this._tx, this._ty)) return 'grass';
     if (this.world.hasWheatItem(this._tx, this._ty)) return 'wheat_item';
     if (this.world.hasStoneItem(this._tx, this._ty)) return 'stone_item';
@@ -373,6 +402,15 @@ export class Player {
       this.resources.add('stone', 1);
       this._gatheredStoneTile = { tx: this._tx, ty: this._ty };
       this.showGatherFeedback('+1 stone');
+      return;
+    }
+
+    // Fence — picked up with axe equipped (deterministic, no probability)
+    if (resource === 'fence') {
+      this.fences!.remove(this._tx, this._ty);
+      this.resources.add('fence', 1);
+      this._gatheredFenceTile = { tx: this._tx, ty: this._ty };
+      this.showGatherFeedback('+1 fence');
       return;
     }
 

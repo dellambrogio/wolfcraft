@@ -13,6 +13,7 @@ import { InstructionPanel } from '../ui/InstructionPanel';
 import { SoundSystem } from '../systems/SoundSystem';
 import { NightPipeline } from '../pipelines/NightPipeline';
 import { Fire } from '../entities/Fire';
+import { FenceSystem } from '../world/FenceSystem';
 import { drawIcon } from '../ui/drawIcon';
 import { Inventory } from '../systems/ResourceSystem';
 import { MobileControls } from '../ui/MobileControls';
@@ -52,6 +53,8 @@ export class GameScene extends Phaser.Scene {
   private lastDayNumber = 1;
   private animals: Animal[] = [];
   private fires: Fire[] = [];
+  private fenceSystem!: FenceSystem;
+  private fenceSprites = new Map<string, Phaser.GameObjects.Image>();
   private grassItemSprites = new Map<string, Phaser.GameObjects.Image>();
   private wheatItemSprites = new Map<string, Phaser.GameObjects.Image>();
   private stoneItemSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -88,6 +91,7 @@ export class GameScene extends Phaser.Scene {
       this.resources.add('wood',  5);
       this.resources.add('stone', 5);
       this.resources.add('meat',  3);
+      this.resources.add('fence', 15);
     }
     this.world        = new WorldGenerator(MAP_WIDTH, MAP_HEIGHT, this.worldSeed);
     this.soundSystem  = new SoundSystem(this);
@@ -95,6 +99,8 @@ export class GameScene extends Phaser.Scene {
     this.grassItemSprites.clear();
     this.wheatItemSprites.clear();
     this.stoneItemSprites.clear();
+    this.fenceSprites.clear();
+    this.fenceSystem = new FenceSystem();
     this.renderWorldBackground();
     this.renderWaterDepth();
     this.renderWorld();
@@ -110,7 +116,7 @@ export class GameScene extends Phaser.Scene {
 
     // Spawn player at a walkable tile near center
     const { tx, ty } = this.world.findSpawnTile();
-    this.player = new Player(this, tx, ty, this.world, this.resources, this.mapObjects, this.mobileControls);
+    this.player = new Player(this, tx, ty, this.world, this.resources, this.mapObjects, this.mobileControls, this.fenceSystem);
 
     // World-space tool graphic (follows player, redrawn when tool changes)
     this.playerToolGraphic = this.add.graphics().setDepth(DEPTH_PLAYER + 0.5);
@@ -157,6 +163,9 @@ export class GameScene extends Phaser.Scene {
       this.uiCam.setSize(size.width, size.height);
     }, this);
 
+    // Mouse click interactions (hunt animal / pick up fence)
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.handleWorldClick(p));
+
     // Fade in
     this.cameras.main.fadeIn(500, 0, 0, 0);
   }
@@ -186,6 +195,7 @@ export class GameScene extends Phaser.Scene {
           DEPTH_ANIMALS,
           this.soundSystem,
           { tx: hole.tx, ty: hole.ty },
+          this.fenceSystem,
         ));
       }
     }
@@ -225,6 +235,8 @@ export class GameScene extends Phaser.Scene {
           ty * TILE_SIZE + TILE_SIZE / 2,
           DEPTH_ANIMALS,
           this.soundSystem,
+          undefined,
+          this.fenceSystem,
         ));
       }
     };
@@ -486,8 +498,19 @@ export class GameScene extends Phaser.Scene {
       }
       const gatheredWood = this.player.gatheredWoodTile;
       if (gatheredWood) this.mapObjects.harvestTree(gatheredWood.tx, gatheredWood.ty);
+      const gatheredFence = this.player.gatheredFenceTile;
+      if (gatheredFence) {
+        const { tx: ftx, ty: fty } = gatheredFence;
+        this.fenceSprites.get(`${ftx},${fty}`)?.destroy();
+        this.fenceSprites.delete(`${ftx},${fty}`);
+        this.updateFenceSprite(ftx - 1, fty);
+        this.updateFenceSprite(ftx + 1, fty);
+        this.updateFenceSprite(ftx,     fty - 1);
+        this.updateFenceSprite(ftx,     fty + 1);
+      }
       if (this.player.wantsToHunt) this.resolveHunt();
       if (this.player.wantsToPlaceFire) this.placeFire();
+      if (this.player.wantsToPlaceFence) this.placeFence();
     }
     // Update fires, prune expired
     for (const fire of this.fires) fire.update(delta);
@@ -595,6 +618,39 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: t, y: t.y - 36, alpha: 0, duration: 900, onComplete: () => t.destroy() });
   }
 
+  private fenceBitmask(tx: number, ty: number): number {
+    return (this.fenceSystem.has(tx,     ty - 1) ? 1 : 0)   // top
+         | (this.fenceSystem.has(tx + 1, ty)     ? 2 : 0)   // right
+         | (this.fenceSystem.has(tx,     ty + 1) ? 4 : 0)   // bottom
+         | (this.fenceSystem.has(tx - 1, ty)     ? 8 : 0);  // left
+  }
+
+  private updateFenceSprite(tx: number, ty: number): void {
+    const sprite = this.fenceSprites.get(`${tx},${ty}`);
+    if (sprite) sprite.setTexture(`fence_m${this.fenceBitmask(tx, ty)}`);
+  }
+
+  private placeFence(): void {
+    if (!this.resources.has('fence', 1)) return;
+    const tx = this.player.tileX;
+    const ty = this.player.tileY;
+    if (!this.fenceSystem.place(tx, ty)) return; // already fenced
+    this.resources.subtract('fence', 1);
+
+    const img = this.add.image(
+      tx * TILE_SIZE + TILE_SIZE / 2,
+      ty * TILE_SIZE + TILE_SIZE / 2,
+      `fence_m${this.fenceBitmask(tx, ty)}`,
+    ).setDepth(DEPTH_PLAYER + 0.5);
+    this.fenceSprites.set(`${tx},${ty}`, img);
+
+    // Update all 4 adjacent fences so they connect to the new one
+    this.updateFenceSprite(tx - 1, ty);
+    this.updateFenceSprite(tx + 1, ty);
+    this.updateFenceSprite(tx,     ty - 1);
+    this.updateFenceSprite(tx,     ty + 1);
+  }
+
   private placeFire(): void {
     if (!this.resources.has('fire', 1)) return;
     this.resources.subtract('fire', 1);
@@ -602,26 +658,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resolveHunt(): void {
-    // Find nearest alive animal in range
-    const px = this.player.x;
-    const py = this.player.y;
-    let nearest: typeof this.animals[0] | null = null;
+    const px = this.player.x, py = this.player.y;
+    let nearest: Animal | null = null;
     let nearestDist = HUNT_RANGE_PX;
-
     for (const animal of this.animals) {
       if (animal.dead) continue;
-      const dx = animal.sprite.x - px;
-      const dy = animal.sprite.y - py;
-      const d  = Math.sqrt(dx * dx + dy * dy);
+      const dx = animal.sprite.x - px, dy = animal.sprite.y - py;
+      const d = Math.sqrt(dx * dx + dy * dy);
       if (d < nearestDist) { nearest = animal; nearestDist = d; }
     }
+    if (nearest) this.executeHuntOn(nearest);
+  }
 
-    if (!nearest) return; // no animal in range
-
-    // Pick best available tool
-    const inv = this.resources.getAll();
-    const toolKey = ['knife', 'axe', 'pickaxe'].find(t => inv[t as keyof typeof inv] > 0) ?? 'none';
-    const probs   = HUNT_PROBS[toolKey];
+  private executeHuntOn(target: Animal): void {
+    const px = this.player.x, py = this.player.y;
 
     const showFeedback = (msg: string, color: string) => {
       const t = this.add.text(px, py - TILE_SIZE, msg, {
@@ -631,28 +681,81 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
     };
 
-    if (Math.random() >= probs.kill) {
-      showFeedback('missed!', '#ff8888');
-      return;
-    }
+    const inv     = this.resources.getAll();
+    const toolKey = ['knife', 'axe', 'pickaxe'].find(t => inv[t as keyof typeof inv] > 0) ?? 'none';
+    const probs   = HUNT_PROBS[toolKey];
 
-    // Hit — deal 1 damage
-    const died = nearest.takeDamage(1);
-    if (!died) {
-      showFeedback(`-1 HP (${nearest.health}/${nearest.maxHealth})`, '#ffaaaa');
-      return;
-    }
+    if (Math.random() >= probs.kill) { showFeedback('missed!', '#ff8888'); return; }
 
-    // Killed
+    const died = target.takeDamage(1);
+    if (!died) { showFeedback(`-1 HP (${target.health}/${target.maxHealth})`, '#ffaaaa'); return; }
+
     this.soundSystem.playKill();
-    this.animals = this.animals.filter(a => a !== nearest);
+    this.animals = this.animals.filter(a => a !== target);
 
     if (Math.random() < probs.meat) {
-      const yield_ = nearest!.meatYield;
-      this.resources.add('meat', yield_);
-      showFeedback(`+${yield_} meat`, '#ffccaa');
+      this.resources.add('meat', target.meatYield);
+      showFeedback(`+${target.meatYield} meat`, '#ffccaa');
     } else {
       showFeedback('no meat', '#888888');
     }
+  }
+
+  /**
+   * Handle a world-space left click:
+   *   • Click on an animal within hunt range → attack it.
+   *   • Click on a fence tile within reach with axe equipped → pick it up.
+   */
+  private handleWorldClick(pointer: Phaser.Input.Pointer): void {
+    if (this.gameOver || this.craftingMenu.isOpen) return;
+
+    const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    const px = this.player.x, py = this.player.y;
+
+    // ── Click to attack an animal ────────────────────────────────────────
+    const CLICK_RADIUS = 44; // px — click slop on animal sprite
+    let clickedAnimal: Animal | null = null;
+    let best = CLICK_RADIUS;
+    for (const animal of this.animals) {
+      if (animal.dead) continue;
+      const dx = animal.sprite.x - wp.x, dy = animal.sprite.y - wp.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < best) { clickedAnimal = animal; best = d; }
+    }
+    if (clickedAnimal) {
+      const dx = clickedAnimal.sprite.x - px, dy = clickedAnimal.sprite.y - py;
+      if (dx * dx + dy * dy <= HUNT_RANGE_PX ** 2) {
+        this.executeHuntOn(clickedAnimal);
+        return;
+      }
+    }
+
+    // ── Click to pick up a fence (axe must be equipped) ──────────────────
+    if (this.hud.equippedTool !== 'axe') return;
+
+    const tx = Math.floor(wp.x / TILE_SIZE);
+    const ty = Math.floor(wp.y / TILE_SIZE);
+    if (!this.fenceSystem.has(tx, ty)) return;
+
+    const FENCE_REACH = TILE_SIZE * 3; // 3-tile reach
+    const fdx = tx * TILE_SIZE + TILE_SIZE / 2 - px;
+    const fdy = ty * TILE_SIZE + TILE_SIZE / 2 - py;
+    if (fdx * fdx + fdy * fdy > FENCE_REACH ** 2) return;
+
+    this.fenceSystem.remove(tx, ty);
+    this.resources.add('fence', 1);
+    const key = `${tx},${ty}`;
+    this.fenceSprites.get(key)?.destroy();
+    this.fenceSprites.delete(key);
+    this.updateFenceSprite(tx - 1, ty);
+    this.updateFenceSprite(tx + 1, ty);
+    this.updateFenceSprite(tx,     ty - 1);
+    this.updateFenceSprite(tx,     ty + 1);
+
+    const t = this.add.text(wp.x, wp.y - 20, '+1 fence', {
+      fontFamily: 'monospace', fontSize: '13px', color: '#c07a38',
+      stroke: '#000', strokeThickness: 2,
+    }).setDepth(DEPTH_PLAYER + 1);
+    this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
 }
