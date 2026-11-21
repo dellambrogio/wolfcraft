@@ -4,6 +4,10 @@ A browser-based 2D survival game built with Phaser 3, TypeScript, and Vite.
 
 Survive the night. Hunt. Gather. Endure.
 
+[![Wolfcraft gameplay](docs/gameplay.gif)](docs/gameplay.mp4)
+
+*Gameplay (2× speed): exploring biomes, gathering, crafting a campfire, torch and fire at nightfall. Click for the [full-speed video](docs/gameplay.mp4).*
+
 ---
 
 ## Tech Stack
