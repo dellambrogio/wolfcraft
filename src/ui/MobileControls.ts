@@ -18,7 +18,6 @@ export class MobileControls {
   // One-shot action flags
   private _justGather = false;
   private _justEat    = false;
-  private _justHunt   = false;
   private _justFire   = false;
   private _justTorch  = false;
   private _justCraft  = false;
@@ -26,7 +25,6 @@ export class MobileControls {
 
   get justGather(): boolean { const v = this._justGather; this._justGather = false; return v; }
   get justEat():    boolean { const v = this._justEat;    this._justEat    = false; return v; }
-  get justHunt():   boolean { const v = this._justHunt;   this._justHunt   = false; return v; }
   get justFire():   boolean { const v = this._justFire;   this._justFire   = false; return v; }
   get justTorch():  boolean { const v = this._justTorch;  this._justTorch  = false; return v; }
   get justCraft():  boolean { const v = this._justCraft;  this._justCraft  = false; return v; }
@@ -81,7 +79,6 @@ export class MobileControls {
 
     const actions: { label: string; col: number; row: number; fn: () => void; color?: number }[] = [
       { label: 'Gather', col: 0, row: 0, fn: () => { this._justGather = true; } },
-      { label: 'Hunt',   col: 1, row: 0, fn: () => { this._justHunt   = true; } },
       { label: 'Eat',    col: 0, row: 1, fn: () => { this._justEat    = true; } },
       { label: 'Fire',   col: 1, row: 1, fn: () => { this._justFire   = true; } },
       { label: 'Torch',  col: 0, row: 2, fn: () => { this._justTorch  = true; } },

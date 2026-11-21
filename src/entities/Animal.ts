@@ -341,9 +341,11 @@ export class Animal {
           this.inHopPause = false;
         }
       } else {
-        // Normal diurnal: hide in forest at night
+        // Normal diurnal: hide in forest at night or when player gets close
         if (this.state === 'hiding') {
-          if (isDay) {
+          const dx2 = this.sprite.x - playerX, dy2 = this.sprite.y - playerY;
+          const farEnough = dx2 * dx2 + dy2 * dy2 > (effectiveAwareness * 1.6) ** 2;
+          if (isDay && farEnough) {
             this.sprite.setVisible(true).setAlpha(0);
             this.scene.tweens.add({ targets: this.sprite, alpha: 1, duration: 1500 });
             this.state      = 'wander';
@@ -471,6 +473,22 @@ export class Animal {
     }
 
     this.playAnim(`${this.cfg.texture}_idle`);
+
+    // Deer / pig: disappear into forest on arrival (like rabbits into holes)
+    if (
+      !this.cfg.nocturnal &&
+      this.homeTx === null &&
+      (this._type === AnimalType.DEER || this._type === AnimalType.PIG) &&
+      this.state !== 'hiding' && this.state !== 'retreating' &&
+      this.world.getTile(this._tx, this._ty) === TileType.FOREST
+    ) {
+      this.scene.tweens.add({
+        targets: this.sprite, alpha: 0, duration: 400,
+        onComplete: () => this.sprite.setVisible(false).setAlpha(1),
+      });
+      this.state = 'hiding';
+      return;
+    }
 
     // State machine always ticks — pressure only affects speed and direction
     this.stateTimer -= delta;
@@ -618,7 +636,13 @@ export class Animal {
       const attract  = !forceRepel && !!this.cfg.attracted;
       const bias     = attract ? (1 - dot) / 2 : (dot + 1) / 2;
       const random   = Math.random();
-      return { ...c, score: bias * pressure + random * (1 - pressure) };
+      // Deer and pigs prefer grass tiles when calm
+      const grassBonus =
+        (this._type === AnimalType.DEER || this._type === AnimalType.PIG) &&
+        this.world.getTile(c.tx, c.ty) === TileType.GRASS
+          ? 0.35 * (1 - pressure)
+          : 0;
+      return { ...c, score: bias * pressure + random * (1 - pressure) + grassBonus };
     });
 
     scored.sort((a, b) => b.score - a.score);

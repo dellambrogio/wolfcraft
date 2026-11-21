@@ -8,7 +8,6 @@ const CONTROLS: [string, string][] = [
   ['WASD / Arrows', 'Move'],
   ['Shift  (hold)', 'Sneak — animals less aware'],
   ['Q',             'Gather resource / pick up item'],
-  ['K',             'Hunt nearest animal'],
   ['Z',             'Eat food (restores HP)'],
   ['T',             'Toggle torch'],
   ['F',             'Place campfire'],

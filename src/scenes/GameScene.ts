@@ -30,6 +30,7 @@ import {
   FOG_RADIUS,
   HUNT_RANGE_PX,
   HUNT_PROBS,
+  TOOL_GATHER_PROB,
 } from '../constants';
 import {
   GameSettings,
@@ -63,6 +64,7 @@ export class GameScene extends Phaser.Scene {
   private stoneItemSprites = new Map<string, Phaser.GameObjects.Image>();
   private playerToolGraphic!: Phaser.GameObjects.Graphics;
   private lastEquippedTool: keyof Inventory | null = null;
+  private swingActive = false;
   private gameOver = false;
   private worldSeed = NOISE_SEED;
   private settings: GameSettings = { ...DEFAULT_SETTINGS };
@@ -131,7 +133,7 @@ export class GameScene extends Phaser.Scene {
     const mapW = MAP_WIDTH * TILE_SIZE;
     const mapH = MAP_HEIGHT * TILE_SIZE;
     this.cameras.main.setBounds(0, 0, mapW, mapH);
-    this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
+    this.cameras.main.startFollow(this.player.sprite, true, 1, 1);
 
     // Fog of war
     this.fog = new FogOfWar(this, MAP_WIDTH, MAP_HEIGHT, FOG_RADIUS);
@@ -211,16 +213,17 @@ export class GameScene extends Phaser.Scene {
   private spawnAnimals(): void {
     const forestTiles: [number, number][] = [];
     const swampTiles:  [number, number][] = [];
+    const grassTiles:  [number, number][] = [];
     const anyTiles:    [number, number][] = [];
 
     for (let ty = 0; ty < MAP_HEIGHT; ty++) {
       for (let tx = 0; tx < MAP_WIDTH; tx++) {
-        switch (this.world.getTile(tx, ty)) {
-          case TileType.GRASS:
-          case TileType.FOREST: anyTiles.push([tx, ty]); break;
-          case TileType.SWAMP:  swampTiles.push([tx, ty]); break;
+        const tile = this.world.getTile(tx, ty);
+        switch (tile) {
+          case TileType.GRASS:   grassTiles.push([tx, ty]); anyTiles.push([tx, ty]); break;
+          case TileType.FOREST:  forestTiles.push([tx, ty]); anyTiles.push([tx, ty]); break;
+          case TileType.SWAMP:   swampTiles.push([tx, ty]); break;
         }
-        if (this.world.getTile(tx, ty) === TileType.FOREST) forestTiles.push([tx, ty]);
       }
     }
 
@@ -231,7 +234,7 @@ export class GameScene extends Phaser.Scene {
       }
       return a;
     };
-    shuffle(forestTiles); shuffle(swampTiles); shuffle(anyTiles);
+    shuffle(forestTiles); shuffle(swampTiles); shuffle(grassTiles); shuffle(anyTiles);
 
     const spawn = (pool: [number, number][], count: number, type: AnimalType) => {
       for (let i = 0; i < Math.min(count, pool.length); i++) {
@@ -249,8 +252,8 @@ export class GameScene extends Phaser.Scene {
       }
     };
 
-    spawn([...forestTiles, ...anyTiles], 15, AnimalType.DEER);
-    spawn([...swampTiles, ...forestTiles], 10, AnimalType.PIG);
+    spawn(grassTiles, 15, AnimalType.DEER);
+    spawn([...grassTiles.slice(15), ...swampTiles], 10, AnimalType.PIG);
     if (this.settings.wolvesEnabled) {
       spawn([...forestTiles, ...swampTiles, ...anyTiles], 8, AnimalType.WOLF);
     }
@@ -486,47 +489,49 @@ export class GameScene extends Phaser.Scene {
     if (!this.craftingMenu.isOpen) {
       this.player.update(delta);
       if (this.player.isDead) { this.triggerGameOver(); return; }
+      let anyGather = false;
       const gathered = this.player.gatheredGrassTile;
       if (gathered) {
         const key = `${gathered.tx},${gathered.ty}`;
         this.grassItemSprites.get(key)?.destroy();
         this.grassItemSprites.delete(key);
+        anyGather = true;
       }
       const gatheredWheat = this.player.gatheredWheatTile;
       if (gatheredWheat) {
         const key = `${gatheredWheat.tx},${gatheredWheat.ty}`;
         this.wheatItemSprites.get(key)?.destroy();
         this.wheatItemSprites.delete(key);
+        anyGather = true;
       }
       const gatheredStone = this.player.gatheredStoneTile;
       if (gatheredStone) {
         const key = `${gatheredStone.tx},${gatheredStone.ty}`;
         this.stoneItemSprites.get(key)?.destroy();
         this.stoneItemSprites.delete(key);
+        anyGather = true;
       }
       const gatheredWood = this.player.gatheredWoodTile;
-      if (gatheredWood) this.mapObjects.harvestTree(gatheredWood.tx, gatheredWood.ty);
+      if (gatheredWood) { this.mapObjects.harvestTree(gatheredWood.tx, gatheredWood.ty); anyGather = true; }
       const gatheredFence = this.player.gatheredFenceTile;
       if (gatheredFence) {
         const { tx: ftx, ty: fty } = gatheredFence;
         this.fenceSprites.get(`${ftx},${fty}`)?.destroy();
         this.fenceSprites.delete(`${ftx},${fty}`);
-        this.updateFenceSprite(ftx - 1, fty);
-        this.updateFenceSprite(ftx + 1, fty);
-        this.updateFenceSprite(ftx,     fty - 1);
-        this.updateFenceSprite(ftx,     fty + 1);
+        this.updateFenceSprite(ftx - 1, fty); this.updateFenceSprite(ftx + 1, fty);
+        this.updateFenceSprite(ftx, fty - 1); this.updateFenceSprite(ftx, fty + 1);
+        anyGather = true;
       }
       const gatheredWall = this.player.gatheredWallTile;
       if (gatheredWall) {
         const { tx: wtx, ty: wty } = gatheredWall;
         this.wallSprites.get(`${wtx},${wty}`)?.destroy();
         this.wallSprites.delete(`${wtx},${wty}`);
-        this.updateWallSprite(wtx - 1, wty);
-        this.updateWallSprite(wtx + 1, wty);
-        this.updateWallSprite(wtx,     wty - 1);
-        this.updateWallSprite(wtx,     wty + 1);
+        this.updateWallSprite(wtx - 1, wty); this.updateWallSprite(wtx + 1, wty);
+        this.updateWallSprite(wtx, wty - 1); this.updateWallSprite(wtx, wty + 1);
+        anyGather = true;
       }
-      if (this.player.wantsToHunt) this.resolveHunt();
+      if (anyGather) this.triggerSwing('gather');
       if (this.player.wantsToPlaceFire) this.placeFire();
       if (this.player.wantsToPlaceFence) this.placeFence();
       if (this.player.wantsToPlaceWall)  this.placeWall();
@@ -590,13 +595,16 @@ export class GameScene extends Phaser.Scene {
     const currentItem = this.hud.selectedItem;
     this.player.setEquippedTool(currentItem);
 
-    // Player selected-item graphic — reposition each frame, redraw when item changes
+    // Player selected-item graphic — pivot around player centre, redraw when item changes
     const px2 = this.player.x, py2 = this.player.y;
-    this.playerToolGraphic.setPosition(px2 + 22, py2);
+    this.playerToolGraphic.setPosition(px2, py2);
     if (currentItem !== this.lastEquippedTool) {
       this.playerToolGraphic.clear();
-      if (currentItem) drawIcon(this.playerToolGraphic, 0, 0, currentItem, 1.1);
+      // Icon drawn at local offset so rotation swings it around the player
+      if (currentItem) drawIcon(this.playerToolGraphic, 30, -8, currentItem, 1.1);
       this.lastEquippedTool = currentItem;
+      this.playerToolGraphic.rotation = 0;
+      this.swingActive = false;
     }
 
     // HUD gather hint
@@ -699,19 +707,6 @@ export class GameScene extends Phaser.Scene {
     this.updateWallSprite(tx, ty - 1); this.updateWallSprite(tx, ty + 1);
   }
 
-  private resolveHunt(): void {
-    const px = this.player.x, py = this.player.y;
-    let nearest: Animal | null = null;
-    let nearestDist = HUNT_RANGE_PX;
-    for (const animal of this.animals) {
-      if (animal.dead) continue;
-      const dx = animal.sprite.x - px, dy = animal.sprite.y - py;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < nearestDist) { nearest = animal; nearestDist = d; }
-    }
-    if (nearest) this.executeHuntOn(nearest);
-  }
-
   private executeHuntOn(target: Animal): void {
     const px = this.player.x, py = this.player.y;
 
@@ -730,6 +725,7 @@ export class GameScene extends Phaser.Scene {
     if (Math.random() >= probs.kill) { showFeedback('missed!', '#ff8888'); return; }
 
     const died = target.takeDamage(1);
+    this.showHitFlash(target.sprite.x, target.sprite.y);
     if (!died) { showFeedback(`-1 HP (${target.health}/${target.maxHealth})`, '#ffaaaa'); return; }
 
     this.soundSystem.playKill();
@@ -756,9 +752,15 @@ export class GameScene extends Phaser.Scene {
     const TOOLBELT_H = 86;
     if (pointer.y > this.scale.height - TOOLBELT_H) return;
 
+    // Always swing on any world click
+    const selected = this.hud.selectedItem;
+    const swingType = (selected === 'fence' || selected === 'wall') ? 'place'
+      : (selected === 'axe' || selected === 'knife' || selected === 'pickaxe') ? 'attack'
+      : 'gather';
+    this.triggerSwing(swingType);
+
     const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     const px = this.player.x, py = this.player.y;
-    const selected = this.hud.selectedItem;
 
     // ── Place fence by click ─────────────────────────────────────────────
     if (selected === 'fence') {
@@ -776,26 +778,45 @@ export class GameScene extends Phaser.Scene {
     const TOOLS = new Set<keyof Inventory>(['axe', 'pickaxe', 'knife']);
     if (!selected || !TOOLS.has(selected)) return;
 
-    // Attack animal within hunt range
-    const CLICK_RADIUS = 44;
-    let clickedAnimal: Animal | null = null;
-    let best = CLICK_RADIUS;
-    for (const animal of this.animals) {
-      if (animal.dead) continue;
-      const dx = animal.sprite.x - wp.x, dy = animal.sprite.y - wp.y;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < best) { clickedAnimal = animal; best = d; }
-    }
-    if (clickedAnimal) {
-      const dx = clickedAnimal.sprite.x - px, dy = clickedAnimal.sprite.y - py;
-      if (dx * dx + dy * dy <= HUNT_RANGE_PX ** 2) {
-        this.executeHuntOn(clickedAnimal);
-        return;
+    // Knife / pickaxe: attack nearest visible animal to player within hunt range
+    if (selected === 'knife' || selected === 'pickaxe') {
+      let nearest: Animal | null = null;
+      let bestDist = HUNT_RANGE_PX;
+      for (const animal of this.animals) {
+        if (animal.dead) continue;
+        const atx = Math.floor(animal.sprite.x / TILE_SIZE);
+        const aty = Math.floor(animal.sprite.y / TILE_SIZE);
+        if (!this.fog.isRevealed(atx, aty)) continue;
+        const dx = animal.sprite.x - px, dy = animal.sprite.y - py;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < bestDist) { nearest = animal; bestDist = d; }
       }
+      if (nearest) {
+        this.executeHuntOn(nearest);
+      } else {
+        this.floatText(this.player.x, this.player.y, '...', '#888888');
+      }
+      return;
     }
 
-    // Axe: pick up fence or wall within reach
+    // Axe: chop nearest tree in vicinity, then try fence/wall pickup
     if (selected !== 'axe') return;
+
+    const tree = this.mapObjects.findNearestTree(this.player.tileX, this.player.tileY);
+    if (tree) {
+      if (Math.random() < TOOL_GATHER_PROB) {
+        this.resources.add('wood', 1);
+        this.mapObjects.harvestTree(tree.tx, tree.ty);
+        this.floatText(
+          tree.tx * TILE_SIZE + TILE_SIZE / 2,
+          tree.ty * TILE_SIZE + TILE_SIZE / 2,
+          '+1 wood', '#a07848',
+        );
+      } else {
+        this.floatText(this.player.x, this.player.y, '...', '#888888');
+      }
+      return;
+    }
 
     const tx = Math.floor(wp.x / TILE_SIZE);
     const ty = Math.floor(wp.y / TILE_SIZE);
@@ -843,5 +864,61 @@ export class GameScene extends Phaser.Scene {
       stroke: '#000', strokeThickness: 2,
     }).setDepth(DEPTH_PLAYER + 1);
     this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+  }
+
+  // ── Tool animations ────────────────────────────────────────────────────────
+
+  /**
+   * Swing the held-item graphic in a brief arc.
+   *   attack — fast slash (–0.9 → +0.55 rad), camera micro-shake
+   *   gather — chop arc  (–0.5 → +0.75 rad), slower
+   *   place  — push-down (0 → +0.6 rad), then spring back
+   */
+  private triggerSwing(type: 'attack' | 'gather' | 'place'): void {
+    if (this.swingActive) return;
+    this.swingActive = true;
+
+    const g = this.playerToolGraphic;
+
+    const cfg = {
+      attack: { start: -0.9, peak: 0.55, dur: 90,  returnDur: 130 },
+      gather: { start: -0.5, peak: 0.75, dur: 120, returnDur: 160 },
+      place:  { start:  0.0, peak: 0.60, dur: 100, returnDur: 140 },
+    }[type];
+
+    g.rotation = cfg.start;
+
+    this.tweens.add({
+      targets: g,
+      rotation: cfg.peak,
+      duration: cfg.dur,
+      ease: 'Power2.easeIn',
+      onComplete: () => {
+        this.tweens.add({
+          targets: g,
+          rotation: 0,
+          duration: cfg.returnDur,
+          ease: 'Back.easeOut',
+          onComplete: () => { this.swingActive = false; },
+        });
+      },
+    });
+
+  }
+
+  /** Brief expanding white circle at a world position — hit confirmation. */
+  private showHitFlash(wx: number, wy: number): void {
+    const flash = this.add.graphics().setDepth(DEPTH_PLAYER + 2);
+    flash.fillStyle(0xffffff, 0.75);
+    flash.fillCircle(wx, wy, 18);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scaleX: 2.2,
+      scaleY: 2.2,
+      duration: 200,
+      ease: 'Power2',
+      onComplete: () => flash.destroy(),
+    });
   }
 }

@@ -43,7 +43,6 @@ export class Player {
   };
   private gatherKey!:    Phaser.Input.Keyboard.Key;
   private torchKey!:     Phaser.Input.Keyboard.Key;
-  private huntKey!:      Phaser.Input.Keyboard.Key;
   private firePlaceKey!:  Phaser.Input.Keyboard.Key;
   private fencePlaceKey!: Phaser.Input.Keyboard.Key;
   private wallPlaceKey!:  Phaser.Input.Keyboard.Key;
@@ -53,7 +52,6 @@ export class Player {
   private lastGatherTime = 0;
   private _nearGatherable = false;
   private _torchOn = false;
-  private _wantsToHunt = false;
   private _sneaking = false;
   private currentMoveDuration = TILE_MOVE_MS;
   private _wantsToPlaceFire  = false;
@@ -190,7 +188,6 @@ export class Player {
     };
     this.gatherKey     = kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
     this.torchKey      = kb.addKey(Phaser.Input.Keyboard.KeyCodes.T);
-    this.huntKey       = kb.addKey(Phaser.Input.Keyboard.KeyCodes.K);
     this.firePlaceKey  = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F);
     this.fencePlaceKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.B);
     this.wallPlaceKey  = kb.addKey(Phaser.Input.Keyboard.KeyCodes.V);
@@ -212,13 +209,6 @@ export class Player {
   get isDead(): boolean { return this._health <= 0; }
   takeDamage(amount: number): void { this._health = Math.max(0, this._health - amount); }
   heal(amount: number): void { this._health = Math.min(this.maxHealth, this._health + amount); }
-  /** Consumed once by GameScene to trigger hunt resolution. */
-  get wantsToHunt(): boolean {
-    const v = this._wantsToHunt;
-    this._wantsToHunt = false;
-    return v;
-  }
-
   /** Consumed once by GameScene to place a fire at the player's tile. */
   get wantsToPlaceFire(): boolean {
     const v = this._wantsToPlaceFire;
@@ -308,11 +298,6 @@ export class Player {
     // --- Torch toggle ---
     if (Phaser.Input.Keyboard.JustDown(this.torchKey) || this.mobile?.justTorch) {
       this._torchOn = !this._torchOn;
-    }
-
-    // --- Hunt ---
-    if (Phaser.Input.Keyboard.JustDown(this.huntKey) || this.mobile?.justHunt) {
-      this._wantsToHunt = true;
     }
 
     // --- Place fire ---
